@@ -627,22 +627,6 @@ fn seedRegistryWithAccounts(
     try registry.saveRegistry(allocator, codex_home, &reg);
 }
 
-fn setRegistryApiConfig(
-    allocator: std.mem.Allocator,
-    home_root: []const u8,
-    usage_enabled: bool,
-    account_enabled: bool,
-) !void {
-    const codex_home = try codexHomeAlloc(allocator, home_root);
-    defer allocator.free(codex_home);
-
-    var reg = try registry.loadRegistry(allocator, codex_home);
-    defer reg.deinit(allocator);
-    reg.api.usage = usage_enabled;
-    reg.api.account = account_enabled;
-    try registry.saveRegistry(allocator, codex_home, &reg);
-}
-
 fn makeUsageSnapshot(primary_used_percent: f64, secondary_used_percent: f64) registry.RateLimitSnapshot {
     return .{
         .primary = .{
@@ -1187,13 +1171,14 @@ test "Scenario: Given API key import when listing with api refresh then stale sn
     try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "apikey-flow@example.com") != null);
     try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "chatgpt-flow@example.com") != null);
     try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "API_KEY") != null);
-    try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "88%") != null);
-    try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "66%") != null);
     try std.testing.expect(std.mem.indexOf(u8, first_list.stdout, "MissingAuth") == null);
     try std.testing.expectEqualStrings("", first_list.stderr);
 
     var refreshed = try registry.loadRegistry(gpa, codex_home);
     defer refreshed.deinit(gpa);
+    const refreshed_api_idx = registry.findAccountIndexByAccountKey(&refreshed, api_account_key) orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(@as(f64, 88), refreshed.accounts.items[refreshed_api_idx].last_usage.?.primary.?.used_percent);
+    try std.testing.expectEqual(@as(f64, 66), refreshed.accounts.items[refreshed_api_idx].last_usage.?.secondary.?.used_percent);
     const chatgpt_idx = registry.findAccountIndexByAccountKey(&refreshed, chatgpt_key) orelse return error.TestExpectedEqual;
     try std.testing.expectEqual(@as(f64, 12), refreshed.accounts.items[chatgpt_idx].last_usage.?.primary.?.used_percent);
     try std.testing.expectEqual(@as(f64, 34), refreshed.accounts.items[chatgpt_idx].last_usage.?.secondary.?.used_percent);
@@ -1216,9 +1201,13 @@ test "Scenario: Given API key import when listing with api refresh then stale sn
     try std.testing.expect(std.mem.indexOf(u8, second_list.stdout, "apikey-flow@example.com") != null);
     try std.testing.expect(std.mem.indexOf(u8, second_list.stdout, "API_KEY") != null);
     try std.testing.expect(std.mem.indexOf(u8, second_list.stdout, "MissingAuth") == null);
-    try std.testing.expect(std.mem.indexOf(u8, second_list.stdout, "88%") != null);
-    try std.testing.expect(std.mem.indexOf(u8, second_list.stdout, "66%") != null);
     try std.testing.expectEqualStrings("", second_list.stderr);
+
+    var refreshed_again = try registry.loadRegistry(gpa, codex_home);
+    defer refreshed_again.deinit(gpa);
+    const refreshed_again_api_idx = registry.findAccountIndexByAccountKey(&refreshed_again, api_account_key) orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(@as(f64, 88), refreshed_again.accounts.items[refreshed_again_api_idx].last_usage.?.primary.?.used_percent);
+    try std.testing.expectEqual(@as(f64, 66), refreshed_again.accounts.items[refreshed_again_api_idx].last_usage.?.secondary.?.used_percent);
 }
 
 test "Scenario: Given single-file import missing email when running import then it exits non-zero after reporting the skipped file" {
@@ -1635,7 +1624,7 @@ test "Scenario: Given cpa file import when running import cpa then it stores a s
     try std.testing.expect(std.mem.eql(u8, loaded.accounts.items[0].alias, "personal"));
 }
 
-test "Scenario: Given default api usage when rendering help then the api enable risk note stays in stdout" {
+test "Scenario: Given default api usage when rendering help then skip-api note stays in stdout" {
     const gpa = std.testing.allocator;
     const project_root = try projectRootAlloc(gpa);
     defer gpa.free(project_root);
@@ -1653,9 +1642,9 @@ test "Scenario: Given default api usage when rendering help then the api enable 
 
     try expectSuccess(result);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "codex-auth") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Usage API: ON (api)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Account API: ON") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "`config api enable` may trigger OpenAI account restrictions or suspension in some environments.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Usage API:") == null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Account API:") == null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "API-backed refresh is the default") != null);
     try std.testing.expectEqualStrings("", result.stderr);
 }
 
@@ -1843,7 +1832,7 @@ test "Scenario: Given switch query with no matches when running switch then it e
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "main.zig") == null);
 }
 
-test "Scenario: Given list with api override when api config is disabled then it still requires api refresh executables" {
+test "Scenario: Given list default mode when running list then it requires api refresh executables" {
     const gpa = std.testing.allocator;
     const project_root = try projectRootAlloc(gpa);
     defer gpa.free(project_root);
@@ -1858,8 +1847,6 @@ test "Scenario: Given list with api override when api config is disabled then it
     try seedRegistryWithAccounts(gpa, home_root, "alpha@example.com", &[_]SeedAccount{
         .{ .email = "alpha@example.com", .alias = "alpha" },
     });
-    try setRegistryApiConfig(gpa, home_root, false, false);
-
     try tmp.dir.makePath("empty-bin");
     const empty_path = try tmp.dir.realpathAlloc(gpa, "empty-bin");
     defer gpa.free(empty_path);
@@ -1869,7 +1856,7 @@ test "Scenario: Given list with api override when api config is disabled then it
         project_root,
         home_root,
         empty_path,
-        &[_][]const u8{ "list", "--api" },
+        &[_][]const u8{"list"},
     );
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
@@ -2398,7 +2385,7 @@ test "Scenario: Given remove without api flags when running remove then it requi
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "Node.js 22+") != null);
 }
 
-test "Scenario: Given remove without selectors and api disabled in config when running remove then it does not require api refresh executables" {
+test "Scenario: Given remove without selectors in default mode when running remove then it requires api refresh executables" {
     const gpa = std.testing.allocator;
     const project_root = try projectRootAlloc(gpa);
     defer gpa.free(project_root);
@@ -2414,11 +2401,6 @@ test "Scenario: Given remove without selectors and api disabled in config when r
         .{ .email = "alpha@example.com", .alias = "" },
         .{ .email = "beta@example.com", .alias = "" },
     });
-    try setRegistryApiConfig(gpa, home_root, false, false);
-
-    const codex_home = try codexHomeAlloc(gpa, home_root);
-    defer gpa.free(codex_home);
-
     try tmp.dir.makePath("empty-bin");
     const empty_path = try tmp.dir.realpathAlloc(gpa, "empty-bin");
     defer gpa.free(empty_path);
@@ -2434,14 +2416,9 @@ test "Scenario: Given remove without selectors and api disabled in config when r
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
 
-    try expectSuccess(result);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Select accounts to delete:") != null);
-    try std.testing.expectEqualStrings("", result.stderr);
-
-    var loaded = try registry.loadRegistry(gpa, codex_home);
-    defer loaded.deinit(gpa);
-    try std.testing.expectEqual(@as(usize, 1), loaded.accounts.items.len);
-    try std.testing.expect(std.mem.eql(u8, loaded.accounts.items[0].email, "alpha@example.com"));
+    try expectFailure(result);
+    try std.testing.expectEqualStrings("", result.stdout);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "Node.js 22+") != null);
 }
 
 test "Scenario: Given remove with skip-api when running remove then it does not require api refresh executables" {
@@ -3344,8 +3321,8 @@ test "Scenario: Given default api usage when rendering status then no warning is
 
     try expectSuccess(result);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "auto-switch: OFF") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "usage: api") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "account: api") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "usage:") == null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stdout, "account:") == null);
     try std.testing.expectEqualStrings("", result.stderr);
 }
 
