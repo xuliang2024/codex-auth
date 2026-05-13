@@ -35,29 +35,17 @@ pub const RemoveOptions = struct {
     live: bool = false,
     api_mode: ApiMode = .default,
 };
-pub const CleanOptions = struct {};
-pub const AutoAction = enum { enable, disable };
-pub const AutoThresholdOptions = struct {
-    threshold_5h_percent: ?u8,
-    threshold_weekly_percent: ?u8,
-};
-pub const AutoOptions = union(enum) {
-    action: AutoAction,
-    configure: AutoThresholdOptions,
+pub const CleanTarget = enum { accounts, background };
+pub const CleanOptions = struct {
+    target: CleanTarget = .accounts,
 };
 pub const LiveOptions = struct {
     interval_seconds: u16,
 };
-pub const ConfigOptions = union(enum) {
-    auto_switch: AutoOptions,
-    live: LiveOptions,
-};
-pub const DaemonMode = enum { watch, once };
-pub const DaemonOptions = struct { mode: DaemonMode };
+pub const ConfigOptions = union(enum) { live: LiveOptions };
 pub const HelpTopic = enum {
     top_level,
     list,
-    status,
     login,
     import_auth,
     export_auth,
@@ -65,7 +53,6 @@ pub const HelpTopic = enum {
     remove_account,
     clean,
     config,
-    daemon,
 };
 
 pub const Command = union(enum) {
@@ -77,8 +64,6 @@ pub const Command = union(enum) {
     remove_account: RemoveOptions,
     clean: CleanOptions,
     config: ConfigOptions,
-    status: void,
-    daemon: DaemonOptions,
     version: void,
     help: HelpTopic,
 };
