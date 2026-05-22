@@ -3538,3 +3538,105 @@ test "Scenario: Given default api usage when listing accounts then no warning is
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "ACCOUNT") != null);
     try std.testing.expectEqualStrings("", result.stderr);
 }
+
+test "Scenario: Given unsupported native host when launching app then command fails before launch plan" {
+    if (builtin.os.tag == .windows or builtin.os.tag == .macos) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+    try tmp.dir.makePath(".codex");
+    const codex_home = try codexHomeAlloc(gpa, home_root);
+    defer gpa.free(codex_home);
+
+    const result = try runCliWithIsolatedHome(gpa, project_root, home_root, &[_][]const u8{
+        "app",
+        "--id",
+        "OpenAI.Codex",
+        "--codex-home",
+        codex_home,
+    });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectFailure(result);
+    try std.testing.expectEqualStrings("", result.stdout);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "app launch is supported only from the Windows or macOS codex-auth executable.\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "Environment Configuration") == null);
+}
+
+test "Scenario: Given unsupported native host when launching app then managed CLI is not downloaded" {
+    if (builtin.os.tag == .windows or builtin.os.tag == .macos) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+    try tmp.dir.makePath(".codex");
+    const codex_home = try codexHomeAlloc(gpa, home_root);
+    defer gpa.free(codex_home);
+
+    const result = try runCliWithIsolatedHomeAndCodexHome(gpa, project_root, home_root, codex_home, &[_][]const u8{
+        "app",
+        "--id",
+        "OpenAI.Codex",
+    });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectFailure(result);
+    try std.testing.expectEqualStrings("", result.stdout);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "app launch is supported only from the Windows or macOS codex-auth executable.\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "Environment Configuration") == null);
+
+    var codex_home_dir = try tmp.dir.openDir(".codex", .{});
+    defer codex_home_dir.close();
+    try std.testing.expectError(error.FileNotFound, codex_home_dir.access("codext-cli", .{}));
+}
+
+test "Scenario: Given unsupported native host with missing explicit codex CLI path then host rejection happens first" {
+    if (builtin.os.tag == .windows or builtin.os.tag == .macos) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+    const missing_cli_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "missing-codex" });
+    defer gpa.free(missing_cli_path);
+
+    const result = try runCliWithIsolatedHome(gpa, project_root, home_root, &[_][]const u8{
+        "app",
+        "--id",
+        "OpenAI.Codex",
+        "--codex-cli-path",
+        missing_cli_path,
+    });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectFailure(result);
+    try std.testing.expectEqualStrings("", result.stdout);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "app launch is supported only from the Windows or macOS codex-auth executable.\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "ERROR: --codex-cli-path: Path does not exist\n") == null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, missing_cli_path) == null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "Environment Configuration") == null);
+}

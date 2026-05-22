@@ -75,6 +75,85 @@ fn expectArgv(actual: []const []const u8, expected: []const []const u8) !void {
     }
 }
 
+test "Scenario: Given app launch overrides when parsing then IDs and paths are preserved" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{
+        "codex-auth",
+        "app",
+        "--id",
+        "OpenAI.Codex",
+        "--codex-cli-path",
+        "codex-custom",
+        "--codex-home",
+        "/mnt/c/Users/Loong/.codext",
+        "--platform",
+        "win",
+        "--std",
+    };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    switch (result) {
+        .command => |cmd| switch (cmd) {
+            .app => |opts| {
+                try std.testing.expectEqual(cli.types.AppAction.launch, opts.action);
+                try std.testing.expectEqualStrings("OpenAI.Codex", opts.app_id.?);
+                try std.testing.expectEqualStrings("codex-custom", opts.codex_cli_path.?);
+                try std.testing.expectEqualStrings("/mnt/c/Users/Loong/.codext", opts.codex_home.?);
+                try std.testing.expectEqual(cli.types.AppPlatform.win, opts.platform.?);
+                try std.testing.expect(opts.inherit_stdio);
+            },
+            else => return error.TestExpectedEqual,
+        },
+        else => return error.TestExpectedEqual,
+    }
+}
+
+test "Scenario: Given app passthrough args when parsing then usage error is returned" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{ "codex-auth", "app", "--", "--trace" };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    try expectUsageError(result, .app, "`app` does not accept passthrough arguments.");
+}
+
+test "Scenario: Given removed app launch subcommand when parsing then usage error is returned" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{ "codex-auth", "app", "launch" };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    try expectUsageError(result, .app, "unexpected argument `launch` for `app`.");
+}
+
+test "Scenario: Given removed app status subcommand when parsing then usage error is returned" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{ "codex-auth", "app", "status" };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    try expectUsageError(result, .app, "unexpected argument `status` for `app`.");
+}
+
+test "Scenario: Given removed app patch subcommand when parsing then usage error is returned" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{ "codex-auth", "app", "patch", "--platform", "wsl" };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    try expectUsageError(result, .app, "unexpected argument `patch` for `app`.");
+}
+
+test "Scenario: Given removed app unpatch subcommand when parsing then usage error is returned" {
+    const gpa = std.testing.allocator;
+    const args = [_][:0]const u8{ "codex-auth", "app", "unpatch" };
+    var result = try cli.commands.parseArgs(gpa, &args);
+    defer cli.commands.freeParseResult(gpa, &result);
+
+    try expectUsageError(result, .app, "unexpected argument `unpatch` for `app`.");
+}
+
 fn expectedImportMarker(outcome: registry.ImportOutcome) []const u8 {
     return switch (outcome) {
         .imported => if (builtin.os.tag == .windows) "[+]" else "✓",

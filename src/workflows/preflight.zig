@@ -25,7 +25,19 @@ pub fn isHandledCliError(err: anyerror) bool {
         err == error.DuplicateAlias or
         err == error.RemoveConfirmationUnavailable or
         err == error.RemoveSelectionRequiresTty or
-        err == error.InvalidRemoveSelectionInput;
+        err == error.InvalidRemoveSelectionInput or
+        err == error.AppLaunchConfigValidationFailed or
+        err == error.AppIdRequired or
+        err == error.AppIdNotFound or
+        err == error.AppExecutableNotFound or
+        err == error.CodexCliPathNotFound or
+        err == error.CodexCliPathNotAccessible or
+        err == error.CodexCliPathNotFile or
+        err == error.AppLaunchFailed or
+        err == error.WindowsAppLaunchRequiresWindows or
+        err == error.WindowsAppPlatformRequiresWindows or
+        err == error.MacAppPlatformRequiresMacOS or
+        err == error.WindowsPassthroughArgsUnsupported;
 }
 
 pub fn ensureLiveTty(target: LiveTtyTarget) !void {

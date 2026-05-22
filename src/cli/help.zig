@@ -57,6 +57,7 @@ pub fn writeHelp(
     try writeCommandDetail(out, use_color, "clean background");
     try writeCommandSummary(out, use_color, "config", "Manage configuration");
     try writeCommandDetail(out, use_color, "config live --interval <seconds>");
+    try writeCommandSummary(out, use_color, "app", "Launch Codex App with CLI overrides");
 
     try out.writeAll("\n");
     if (use_color) try out.writeAll(style.ansi.cyan);
@@ -131,6 +132,7 @@ fn commandNameForTopic(topic: HelpTopic) []const u8 {
         .alias => "alias",
         .clean => "clean",
         .config => "config",
+        .app => "app",
     };
 }
 
@@ -146,19 +148,20 @@ fn commandDescriptionForTopic(topic: HelpTopic) []const u8 {
         .alias => "Set or clear an account alias by alias, email, display number, or partial query.",
         .clean => "Delete backup and stale files under accounts/.",
         .config => "Manage live refresh configuration.",
+        .app => "Launch Codex App with CLI overrides.",
     };
 }
 
 fn commandHelpHasExamples(topic: HelpTopic) bool {
     return switch (topic) {
-        .import_auth, .export_auth, .switch_account, .remove_account, .alias, .config => true,
+        .import_auth, .export_auth, .switch_account, .remove_account, .alias, .config, .app => true,
         else => false,
     };
 }
 
 fn commandHelpHasOptions(topic: HelpTopic) bool {
     return switch (topic) {
-        .list, .login, .import_auth, .export_auth, .switch_account, .remove_account, .alias, .config => true,
+        .list, .login, .import_auth, .export_auth, .switch_account, .remove_account, .alias, .config, .app => true,
         else => false,
     };
 }
@@ -221,6 +224,9 @@ fn writeUsageLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         .config => {
             try out.writeAll("  codex-auth config live --interval <seconds>\n");
         },
+        .app => {
+            try out.writeAll("  codex-auth app [--id <id>] [--codex-cli-path <path>] [--codex-home <path>] [--platform win|wsl|mac]\n");
+        },
     }
 }
 
@@ -236,6 +242,7 @@ pub fn helpCommandForTopic(topic: HelpTopic) []const u8 {
         .alias => "codex-auth alias --help",
         .clean => "codex-auth clean --help",
         .config => "codex-auth config --help",
+        .app => "codex-auth app --help",
     };
 }
 
@@ -290,6 +297,16 @@ fn writeOptionLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         .config => {
             try out.writeAll("  live --interval <seconds>\n");
             try out.writeAll("                    Set the live TUI refresh interval from 5 to 3600 seconds.\n");
+        },
+        .app => {
+            try out.writeAll("  --id <id>          Windows package/AUMID or macOS bundle identifier.\n");
+            try out.writeAll("  --codex-cli-path <path>\n");
+            try out.writeAll("                     Value injected or persisted as CODEX_CLI_PATH. Defaults to latest managed Loongphy/codext.\n");
+            try out.writeAll("  --codex-home <path>\n");
+            try out.writeAll("                     Value injected as CODEX_HOME for this launch.\n");
+            try out.writeAll("  --platform win|wsl|mac\n");
+            try out.writeAll("                     Preselect the app platform. Defaults to the current app setting on Windows and mac on macOS.\n");
+            try out.writeAll("  --std              Resolve the app package executable, then attach stdout/stderr to this terminal.\n");
         },
         else => {},
     }
@@ -361,6 +378,10 @@ fn writeExampleLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         },
         .config => {
             try out.writeAll("  codex-auth config live --interval 60\n");
+        },
+        .app => {
+            try out.writeAll("  codex-auth app\n");
+            try out.writeAll("  codex-auth app --platform win\n");
         },
     }
 }

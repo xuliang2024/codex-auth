@@ -15,6 +15,7 @@ This directory documents command behavior by command. Use `codex-auth <command> 
 | `alias` | [docs/commands/alias.md](./alias.md) |
 | `clean` | [docs/commands/clean.md](./clean.md) |
 | `config` | [docs/commands/config.md](./config.md) |
+| `app` | [docs/commands/app.md](./app.md) |
 
 ## Shared Behavior
 

@@ -54,6 +54,16 @@ pub const LiveOptions = struct {
     interval_seconds: u16,
 };
 pub const ConfigOptions = union(enum) { live: LiveOptions };
+pub const AppAction = enum { launch };
+pub const AppPlatform = enum { win, wsl, mac };
+pub const AppOptions = struct {
+    action: AppAction,
+    app_id: ?[]const u8 = null,
+    codex_cli_path: ?[]const u8 = null,
+    codex_home: ?[]const u8 = null,
+    platform: ?AppPlatform = null,
+    inherit_stdio: bool = false,
+};
 pub const HelpTopic = enum {
     top_level,
     list,
@@ -65,6 +75,7 @@ pub const HelpTopic = enum {
     alias,
     clean,
     config,
+    app,
 };
 
 pub const Command = union(enum) {
@@ -77,6 +88,7 @@ pub const Command = union(enum) {
     alias: AliasOptions,
     clean: CleanOptions,
     config: ConfigOptions,
+    app: AppOptions,
     version: void,
     help: HelpTopic,
 };
