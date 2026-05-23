@@ -5,12 +5,6 @@ const AccountRecord = common.AccountRecord;
 const Registry = common.Registry;
 
 pub fn importDisplayLabelFromName(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
-    if (std.mem.endsWith(u8, name, ".auth.json")) {
-        return allocator.dupe(u8, name[0 .. name.len - ".auth.json".len]);
-    }
-    if (std.mem.endsWith(u8, name, ".json")) {
-        return allocator.dupe(u8, name[0 .. name.len - ".json".len]);
-    }
     return allocator.dupe(u8, name);
 }
 
@@ -19,26 +13,26 @@ pub fn importDisplayLabel(allocator: std.mem.Allocator, path: []const u8) ![]u8 
 }
 
 pub fn importReasonLabel(err: anyerror) []const u8 {
-    switch (err) {
+    return switch (err) {
         error.SyntaxError,
         error.UnexpectedEndOfInput,
-        => return "MalformedJson",
-        else => {},
-    }
-    return @errorName(err);
+        => "InvalidJSON",
+        error.StreamTooLong => "MaxFileSizeExceeded",
+        else => @errorName(err),
+    };
 }
 
 pub fn isImportValidationError(err: anyerror) bool {
     return switch (err) {
         error.SyntaxError,
         error.UnexpectedEndOfInput,
-        error.InvalidCpaFormat,
+        error.InvalidCPAFormat,
         error.MissingEmail,
         error.MissingChatgptUserId,
-        error.MissingOpenAiApiKey,
-        error.MissingOpenAiUserId,
-        error.InvalidOpenAiMeResponse,
-        error.OpenAiMeRequestFailed,
+        error.MissingOpenAIAPIKey,
+        error.MissingOpenAIUserId,
+        error.InvalidOpenAIMeResponse,
+        error.OpenAIMeRequestFailed,
         error.MissingAccountId,
         error.MissingRefreshToken,
         error.AccountIdMismatch,
