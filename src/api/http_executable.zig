@@ -4,27 +4,24 @@ const app_runtime = @import("../core/runtime.zig");
 const types = @import("http_types.zig");
 const env = @import("http_env.zig");
 
-const node_executable_env = types.node_executable_env;
-const node_requirement_hint = types.node_requirement_hint;
+const curl_requirement_hint = types.curl_requirement_hint;
 const getEnvVarOwned = env.getEnvVarOwned;
 
-pub fn resolveNodeExecutable(allocator: std.mem.Allocator) ![]u8 {
-    return getEnvVarOwned(allocator, node_executable_env) catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => try allocator.dupe(u8, "node"),
-        else => return err,
-    };
+pub fn resolveCurlExecutable(allocator: std.mem.Allocator) ![]u8 {
+    return allocator.dupe(u8, "curl");
 }
 
-pub fn resolveNodeExecutableForLaunchAlloc(allocator: std.mem.Allocator) ![]u8 {
-    const node_executable = try resolveNodeExecutable(allocator);
-    defer allocator.free(node_executable);
-    return ensureExecutableAvailableAlloc(allocator, node_executable);
+pub fn resolveCurlExecutableForLaunchAlloc(allocator: std.mem.Allocator) ![]u8 {
+    const curl_executable = try resolveCurlExecutable(allocator);
+    defer allocator.free(curl_executable);
+    if (try resolveExecutableForLaunchAlloc(allocator, curl_executable)) |resolved| return resolved;
+    logCurlRequirement();
+    return error.CurlRequired;
 }
 
 pub fn ensureExecutableAvailableAlloc(allocator: std.mem.Allocator, executable: []const u8) ![]u8 {
     if (try resolveExecutableForLaunchAlloc(allocator, executable)) |resolved| return resolved;
-    logNodeRequirement();
-    return error.NodeJsRequired;
+    return error.ExecutableRequired;
 }
 
 fn resolveExecutableForLaunchAlloc(allocator: std.mem.Allocator, executable: []const u8) !?[]u8 {
@@ -94,6 +91,6 @@ fn accessPath(path: []const u8) bool {
     return true;
 }
 
-pub fn logNodeRequirement() void {
-    std.log.warn("{s}", .{node_requirement_hint});
+pub fn logCurlRequirement() void {
+    std.log.warn("{s}", .{curl_requirement_hint});
 }

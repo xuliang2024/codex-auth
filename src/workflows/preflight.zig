@@ -5,6 +5,7 @@ const cli = @import("../cli/root.zig");
 const registry = @import("../registry/root.zig");
 const account_names = @import("account_names.zig");
 const targets = @import("targets.zig");
+const usage_refresh = @import("usage.zig");
 
 const ForegroundUsageRefreshTarget = targets.ForegroundUsageRefreshTarget;
 const LiveTtyTarget = targets.LiveTtyTarget;
@@ -18,7 +19,7 @@ pub fn isHandledCliError(err: anyerror) bool {
         err == error.CodexLoginFailed or
         err == error.ListLiveRequiresTty or
         err == error.TuiOutputUnavailable or
-        err == error.NodeJsRequired or
+        err == error.CurlRequired or
         err == error.SwitchSelectionRequiresTty or
         err == error.AliasSelectionRequiresTty or
         err == error.InvalidAlias or
@@ -65,15 +66,16 @@ pub fn apiModeUsesApi(default_enabled: bool, api_mode: cli.types.ApiMode) bool {
     };
 }
 
-pub fn shouldPreflightNodeForForegroundTargetWithApiEnabled(
+pub fn shouldPreflightCurlForForegroundTargetWithApiEnabled(
     allocator: std.mem.Allocator,
     codex_home: []const u8,
     reg: *registry.Registry,
     target: ForegroundUsageRefreshTarget,
     usage_api_enabled: bool,
+    active_only: bool,
     account_api_enabled: bool,
 ) !bool {
-    if (shouldRefreshForegroundUsage(target) and usage_api_enabled and reg.accounts.items.len != 0) {
+    if (shouldRefreshForegroundUsage(target) and usage_api_enabled and hasRefreshableChatGptUsageAccount(reg, active_only)) {
         return true;
     }
 
@@ -87,22 +89,37 @@ pub fn shouldPreflightNodeForForegroundTargetWithApiEnabled(
     return info.access_token != null and info.chatgpt_account_id != null;
 }
 
-pub fn ensureForegroundNodeAvailableWithApiEnabled(
+pub fn ensureForegroundCurlAvailableWithApiEnabled(
     allocator: std.mem.Allocator,
     codex_home: []const u8,
     reg: *registry.Registry,
     target: ForegroundUsageRefreshTarget,
     usage_api_enabled: bool,
+    active_only: bool,
     account_api_enabled: bool,
 ) !void {
-    if (!try shouldPreflightNodeForForegroundTargetWithApiEnabled(
+    if (!try shouldPreflightCurlForForegroundTargetWithApiEnabled(
         allocator,
         codex_home,
         reg,
         target,
         usage_api_enabled,
+        active_only,
         account_api_enabled,
     )) return;
 
-    try chatgpt_http.ensureNodeExecutableAvailable(allocator);
+    try chatgpt_http.ensureCurlExecutableAvailable(allocator);
+}
+
+fn hasRefreshableChatGptUsageAccount(reg: *registry.Registry, active_only: bool) bool {
+    if (active_only) {
+        const active_account_key = reg.active_account_key orelse return false;
+        const idx = registry.findAccountIndexByAccountKey(reg, active_account_key) orelse return false;
+        return usage_refresh.shouldRefreshChatGptUsageForAccount(&reg.accounts.items[idx]);
+    }
+
+    for (reg.accounts.items) |*account| {
+        if (usage_refresh.shouldRefreshChatGptUsageForAccount(account)) return true;
+    }
+    return false;
 }

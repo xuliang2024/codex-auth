@@ -2,18 +2,10 @@
 
 This document is the single source of truth for outbound ChatGPT API refresh behavior in `codex-auth`.
 
-All API refresh requests are issued through `Node.js fetch`.
-When `codex-auth` is launched from the npm package, the wrapper passes its current Node executable to the Zig binary.
-Legacy standalone binary installs must have Node.js 22+ available on `PATH` for API-backed refresh to work.
-Built-in Node environment-proxy support for `fetch()` requires Node.js `22.21.0+` or `24.0.0+`.
+All API refresh requests are issued through `curl`.
+`codex-auth` resolves `curl` from `PATH`.
 
-`codex-auth` configures proxy support for the fetch child process in this order:
-
-1. inherit explicit `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` values from the parent process
-2. map `ALL_PROXY` into `HTTP_PROXY` and `HTTPS_PROXY` when the direct variables are absent
-3. on Windows only, when no proxy environment variables are present and the detected Node runtime supports env-proxy for `fetch()` (`22.21.0+` or `24.0.0+`), read `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` and map HTTP/HTTPS/SOCKS `ProxyServer` entries into `HTTP_PROXY` / `HTTPS_PROXY`
-4. on Windows only, map explicit `ProxyOverride` entries into `NO_PROXY`; the WinINet-only `<local>` shorthand is not translated
-5. when proxy variables are configured and the detected Node runtime supports env-proxy for `fetch()`, set `NODE_USE_ENV_PROXY=1` for the Node child process automatically
+`codex-auth` does not translate platform proxy settings. The curl child process inherits the parent process environment, and curl applies its own proxy environment variable handling.
 
 ## Endpoints
 
@@ -29,19 +21,19 @@ Built-in Node environment-proxy support for `fetch()` requires Node.js `22.21.0+
 ### Account Metadata Refresh
 
 - method: `GET`
-- URL: `https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27`
+- URL: `https://chatgpt.com/backend-api/accounts`
 - headers:
   - `Authorization: Bearer <tokens.access_token>`
   - `ChatGPT-Account-Id: <chatgpt_account_id>`
   - `User-Agent: codex-auth/<version>`
 
-The `accounts/check` response is parsed by `chatgpt_account_id`. `name: null` and `name: ""` are both normalized to `account_name = null`.
+The account metadata response is parsed from `items[].id` and `items[].name`. `name: null` and `name: ""` are both normalized to `account_name = null`. An empty `items` array, or an `items` array with no usable `id`, is treated as unusable and leaves stored `account_name` values unchanged.
 
 ## Usage Refresh Rules
 
 - foreground refresh uses the usage API by default.
 - `--skip-api` reads only the newest local `~/.codex/sessions/**/rollout-*.jsonl`.
-- by default, `list` and interactive `switch` refresh all stored accounts before rendering, using stored auth snapshots under `accounts/` with a maximum concurrency of `3`
+- by default, `list` and interactive `switch` refresh all stored accounts before rendering, using stored auth snapshots under `accounts/`
 - when one of those per-account foreground usage requests returns a non-`200` HTTP status, the corresponding `list` / `switch` row shows that response status in both usage columns until a later successful refresh replaces it
 - when a stored account snapshot cannot make a ChatGPT usage request because it is missing the required ChatGPT auth fields, the corresponding `list` / `switch` row shows `MissingAuth` in both usage columns until a later successful refresh replaces it
 - with `--skip-api`, foreground refresh still uses only the active local rollout data because local session files do not identify the other stored accounts
@@ -71,7 +63,7 @@ The `accounts/check` response is parsed by `chatgpt_account_id`. `name: null` an
 - `list` and interactive `switch` load the request auth context from the current active `auth.json` when they do refresh.
 - stored snapshots without a usable `access_token` or `chatgpt_account_id` are skipped.
 
-At most one `accounts/check` request is attempted per grouped user scope in a given refresh pass.
+At most one account metadata request is attempted per grouped user scope in a given refresh pass.
 Request failures and unparseable responses are non-fatal and leave stored `account_name` values unchanged.
 
 ## Refresh Scope
@@ -89,7 +81,7 @@ That scope includes:
 
 This means a `free`, `plus`, or `pro` record can still trigger a grouped Team-name refresh when it belongs to the same `chatgpt_user_id` as Team records.
 
-`accounts/check` is attempted only when:
+Account metadata refresh is attempted only when:
 
 - the scope contains more than one record
 - the scope contains at least one Team record
@@ -97,7 +89,7 @@ This means a `free`, `plus`, or `pro` record can still trigger a grouped Team-na
 
 ## Apply Rules
 
-After a successful `accounts/check` response:
+After a successful account metadata response:
 
 - returned entries are matched by `chatgpt_account_id`
 - matched records overwrite the stored `account_name`, even when a Team record already had an older value
@@ -111,7 +103,7 @@ Example 1:
 - active record: `user@example.com / Team #1 / account_name = null`
 - same grouped scope: `user@example.com / Team #2 / account_name = null`
 
-Running `codex-auth list` should issue `accounts/check`. If the API returns:
+Running `codex-auth list` should issue an account metadata request. If the API returns:
 
 - `team-1 -> "Workspace Alpha"`
 - `team-2 -> "Workspace Beta"`
@@ -124,7 +116,7 @@ Example 2:
 - same grouped scope: `user@example.com / Team #1 / account_name = null`
 - same grouped scope: `user@example.com / Team #2 / account_name = "Old Workspace"`
 
-Running `codex-auth list` should still issue `accounts/check`, because the grouped scope still has missing Team names. If the API returns:
+Running `codex-auth list` should still issue an account metadata request, because the grouped scope still has missing Team names. If the API returns:
 
 - `team-1 -> "Prod Workspace"`
 - `team-2 -> "Sandbox Workspace"`

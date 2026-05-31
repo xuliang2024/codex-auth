@@ -28,9 +28,57 @@ const findAccountIndexByAccountKeyConst = main_mod.findAccountIndexByAccountKeyC
 const nowSeconds = main_mod.nowSeconds;
 const mapSwitchUsageOverridesToLatest = main_mod.mapSwitchUsageOverridesToLatest;
 const replaceOptionalOwnedString = main_mod.replaceOptionalOwnedString;
+const shouldPreflightCurlForForegroundTargetWithApiEnabled = main_mod.shouldPreflightCurlForForegroundTargetWithApiEnabled;
 
-test "handled cli errors include missing node" {
-    try std.testing.expect(isHandledCliError(error.NodeJsRequired));
+test "handled cli errors include missing curl" {
+    try std.testing.expect(isHandledCliError(error.CurlRequired));
+}
+
+test "curl preflight skips api key only usage refreshes" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const codex_home = try app_runtime.realPathFileAlloc(gpa, tmp.dir, ".");
+    defer gpa.free(codex_home);
+
+    var reg = fixtures.makeEmptyRegistry();
+    defer reg.deinit(gpa);
+    try reg.accounts.append(gpa, .{
+        .account_key = try gpa.dupe(u8, "apikey::user::hash"),
+        .chatgpt_account_id = try gpa.dupe(u8, ""),
+        .chatgpt_user_id = try gpa.dupe(u8, "user"),
+        .email = try gpa.dupe(u8, "api@example.com"),
+        .alias = try gpa.dupe(u8, "api"),
+        .account_name = try gpa.dupe(u8, "API key"),
+        .plan = null,
+        .auth_mode = .apikey,
+        .created_at = 1,
+        .last_used_at = null,
+        .last_usage = null,
+        .last_usage_at = null,
+        .last_local_rollout = null,
+    });
+    try registry.setActiveAccountKey(gpa, &reg, "apikey::user::hash");
+
+    try std.testing.expect(!try shouldPreflightCurlForForegroundTargetWithApiEnabled(
+        gpa,
+        codex_home,
+        &reg,
+        .list,
+        true,
+        false,
+        true,
+    ));
+    try std.testing.expect(!try shouldPreflightCurlForForegroundTargetWithApiEnabled(
+        gpa,
+        codex_home,
+        &reg,
+        .list,
+        true,
+        true,
+        false,
+    ));
 }
 
 fn saveLivePolicyTestRegistry(
@@ -696,12 +744,12 @@ test "live fallback display preserves the refresh error name" {
         codex_home,
         .switch_account,
         .skip_api,
-        error.NodeJsRequired,
+        error.CurlRequired,
     );
     defer loaded.display.deinit(gpa);
     defer if (loaded.refresh_error_name) |name| gpa.free(name);
 
-    try std.testing.expectEqualStrings("NodeJsRequired", loaded.refresh_error_name.?);
+    try std.testing.expectEqualStrings("CurlRequired", loaded.refresh_error_name.?);
 }
 
 test "live tty preflight reports command-specific errors" {
@@ -742,7 +790,7 @@ test "buildStatusLine releases mutex on allocation failure" {
             .interval_ms = switch_live_default_refresh_interval_ms,
             .label = "local",
         },
-        try gpa.dupe(u8, "NodeJsRequired"),
+        try gpa.dupe(u8, "CurlRequired"),
     );
     defer runtime.deinit();
 
