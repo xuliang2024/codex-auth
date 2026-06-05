@@ -8,9 +8,7 @@ const types = @import("types.zig");
 const output = @import("output.zig");
 
 pub const WindowsCodexPathKind = enum {
-    com,
     exe,
-    bat,
     cmd,
     ps1,
 };
@@ -102,25 +100,21 @@ fn resolvePathEntryCandidateAlloc(
 
 fn windowsCodexCandidateName(kind: WindowsCodexPathKind) []const u8 {
     return switch (kind) {
-        .com => "codex.com",
         .exe => "codex.exe",
-        .bat => "codex.bat",
         .cmd => "codex.cmd",
         .ps1 => "codex.ps1",
     };
 }
 
 fn windowsCodexPathExtKind(ext: []const u8) ?WindowsCodexPathKind {
-    if (std.ascii.eqlIgnoreCase(ext, ".com")) return .com;
     if (std.ascii.eqlIgnoreCase(ext, ".exe")) return .exe;
-    if (std.ascii.eqlIgnoreCase(ext, ".bat")) return .bat;
     if (std.ascii.eqlIgnoreCase(ext, ".cmd")) return .cmd;
     return null;
 }
 
 fn resolveWindowsCodexPathExtAlloc(allocator: std.mem.Allocator) ![]u8 {
     return http_env.getEnvVarOwned(allocator, "PATHEXT") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => try allocator.dupe(u8, ".COM;.EXE;.BAT;.CMD"),
+        error.EnvironmentVariableNotFound => try allocator.dupe(u8, ".EXE;.CMD"),
         else => return err,
     };
 }
@@ -144,9 +138,7 @@ fn appendWindowsCodexPathEntryCandidatesAlloc(
     path_ext: []const u8,
     allow_ps1: bool,
 ) !void {
-    var seen_com = false;
     var seen_exe = false;
-    var seen_bat = false;
     var seen_cmd = false;
 
     var ext_it = std.mem.splitScalar(u8, path_ext, ';');
@@ -154,17 +146,9 @@ fn appendWindowsCodexPathEntryCandidatesAlloc(
         const ext = std.mem.trim(u8, raw_ext, " \t");
         const kind = windowsCodexPathExtKind(ext) orelse continue;
         switch (kind) {
-            .com => {
-                if (seen_com) continue;
-                seen_com = true;
-            },
             .exe => {
                 if (seen_exe) continue;
                 seen_exe = true;
-            },
-            .bat => {
-                if (seen_bat) continue;
-                seen_bat = true;
             },
             .cmd => {
                 if (seen_cmd) continue;
@@ -342,7 +326,7 @@ fn buildWindowsCodexLaunchAlloc(
     opts: types.LoginOptions,
 ) !CodexLaunch {
     switch (resolved.kind) {
-        .com, .exe, .bat, .cmd => {
+        .exe, .cmd => {
             var launch = CodexLaunch{};
             launch.argv_storage[0] = resolved.path;
             launch.argv_storage[1] = "login";
@@ -396,8 +380,8 @@ fn shouldRetryWindowsCodexLaunch(err: std.process.SpawnError, kind: WindowsCodex
     return switch (err) {
         error.FileNotFound, error.AccessDenied => true,
         error.InvalidExe => switch (kind) {
-            .com, .exe => false,
-            .bat, .cmd, .ps1 => true,
+            .exe => false,
+            .cmd, .ps1 => true,
         },
         else => false,
     };

@@ -894,31 +894,6 @@ test "Scenario: Given both exe and cmd in one Windows directory when resolving t
     try std.testing.expect(std.mem.endsWith(u8, exe_first.path, "codex.exe"));
 }
 
-test "Scenario: Given com and bat Windows launchers when resolving then legacy PATHEXT-native launchers stay supported" {
-    const gpa = std.testing.allocator;
-    var tmp = fs.tmpDir(.{});
-    defer tmp.cleanup();
-
-    try tmp.dir.makePath("legacy-bin");
-    try tmp.dir.writeFile(.{ .sub_path = "legacy-bin/codex.com", .data = "" });
-    try tmp.dir.writeFile(.{ .sub_path = "legacy-bin/codex.bat", .data = "@echo off\r\nexit /b 0\r\n" });
-
-    const root_dir = try tmp.dir.realpathAlloc(gpa, ".");
-    defer gpa.free(root_dir);
-    const legacy_dir = try std.fs.path.join(gpa, &[_][]const u8{ root_dir, "legacy-bin" });
-    defer gpa.free(legacy_dir);
-
-    var com_first = (try cli.login.resolveWindowsCodexPathEntriesWithPathExtAlloc(gpa, &[_][]const u8{legacy_dir}, ".COM;.BAT")) orelse return error.TestUnexpectedResult;
-    defer com_first.deinit(gpa);
-    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.com, com_first.kind);
-    try std.testing.expect(std.mem.endsWith(u8, com_first.path, "codex.com"));
-
-    var bat_first = (try cli.login.resolveWindowsCodexPathEntriesWithPathExtAlloc(gpa, &[_][]const u8{legacy_dir}, ".BAT;.COM")) orelse return error.TestUnexpectedResult;
-    defer bat_first.deinit(gpa);
-    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.bat, bat_first.kind);
-    try std.testing.expect(std.mem.endsWith(u8, bat_first.path, "codex.bat"));
-}
-
 test "Scenario: Given an earlier PowerShell launcher and a later native Windows launcher when resolving then ps1 stays a global fallback" {
     const gpa = std.testing.allocator;
     var tmp = fs.tmpDir(.{});
