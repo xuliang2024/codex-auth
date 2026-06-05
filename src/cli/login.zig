@@ -8,7 +8,9 @@ const types = @import("types.zig");
 const output = @import("output.zig");
 
 pub const WindowsCodexPathKind = enum {
+    com,
     exe,
+    bat,
     cmd,
     ps1,
 };
@@ -100,21 +102,25 @@ fn resolvePathEntryCandidateAlloc(
 
 fn windowsCodexCandidateName(kind: WindowsCodexPathKind) []const u8 {
     return switch (kind) {
+        .com => "codex.com",
         .exe => "codex.exe",
+        .bat => "codex.bat",
         .cmd => "codex.cmd",
         .ps1 => "codex.ps1",
     };
 }
 
 fn windowsCodexPathExtKind(ext: []const u8) ?WindowsCodexPathKind {
+    if (std.ascii.eqlIgnoreCase(ext, ".com")) return .com;
     if (std.ascii.eqlIgnoreCase(ext, ".exe")) return .exe;
+    if (std.ascii.eqlIgnoreCase(ext, ".bat")) return .bat;
     if (std.ascii.eqlIgnoreCase(ext, ".cmd")) return .cmd;
     return null;
 }
 
 fn resolveWindowsCodexPathExtAlloc(allocator: std.mem.Allocator) ![]u8 {
     return http_env.getEnvVarOwned(allocator, "PATHEXT") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => try allocator.dupe(u8, ".EXE;.CMD"),
+        error.EnvironmentVariableNotFound => try allocator.dupe(u8, ".COM;.EXE;.BAT;.CMD"),
         else => return err,
     };
 }
@@ -136,8 +142,11 @@ fn appendWindowsCodexPathEntryCandidatesAlloc(
     ps1_candidates: *WindowsCodexPathList,
     entry: []const u8,
     path_ext: []const u8,
+    allow_ps1: bool,
 ) !void {
+    var seen_com = false;
     var seen_exe = false;
+    var seen_bat = false;
     var seen_cmd = false;
 
     var ext_it = std.mem.splitScalar(u8, path_ext, ';');
@@ -145,9 +154,17 @@ fn appendWindowsCodexPathEntryCandidatesAlloc(
         const ext = std.mem.trim(u8, raw_ext, " \t");
         const kind = windowsCodexPathExtKind(ext) orelse continue;
         switch (kind) {
+            .com => {
+                if (seen_com) continue;
+                seen_com = true;
+            },
             .exe => {
                 if (seen_exe) continue;
                 seen_exe = true;
+            },
+            .bat => {
+                if (seen_bat) continue;
+                seen_bat = true;
             },
             .cmd => {
                 if (seen_cmd) continue;
@@ -158,7 +175,9 @@ fn appendWindowsCodexPathEntryCandidatesAlloc(
         try appendWindowsCodexPathCandidateIfAvailable(allocator, native_candidates, entry, kind);
     }
 
-    try appendWindowsCodexPathCandidateIfAvailable(allocator, ps1_candidates, entry, .ps1);
+    if (allow_ps1) {
+        try appendWindowsCodexPathCandidateIfAvailable(allocator, ps1_candidates, entry, .ps1);
+    }
 }
 
 fn deinitWindowsCodexPathList(allocator: std.mem.Allocator, candidates: *WindowsCodexPathList) void {
@@ -193,6 +212,7 @@ fn collectWindowsCodexPathEntriesWithPathExtAlloc(
             &ps1_candidates,
             entry,
             path_ext,
+            true,
         );
     }
 
@@ -246,6 +266,7 @@ fn resolveWindowsCodexPathValueAlloc(
             ps1_candidates,
             entry,
             path_ext,
+            true,
         );
     }
 }
@@ -265,6 +286,7 @@ fn collectWindowsCodexPathsAlloc(allocator: std.mem.Allocator) !WindowsCodexPath
         &ps1_candidates,
         ".",
         path_ext,
+        false,
     );
 
     const path_value = http_env.getEnvVarOwned(allocator, "PATH") catch |err| switch (err) {
@@ -320,7 +342,7 @@ fn buildWindowsCodexLaunchAlloc(
     opts: types.LoginOptions,
 ) !CodexLaunch {
     switch (resolved.kind) {
-        .exe, .cmd => {
+        .com, .exe, .bat, .cmd => {
             var launch = CodexLaunch{};
             launch.argv_storage[0] = resolved.path;
             launch.argv_storage[1] = "login";
@@ -339,15 +361,13 @@ fn buildWindowsCodexLaunchAlloc(
             launch.argv_storage[0] = powershell;
             launch.argv_storage[1] = "-NoLogo";
             launch.argv_storage[2] = "-NoProfile";
-            launch.argv_storage[3] = "-ExecutionPolicy";
-            launch.argv_storage[4] = "Bypass";
-            launch.argv_storage[5] = "-File";
-            launch.argv_storage[6] = resolved.path;
-            launch.argv_storage[7] = "login";
-            launch.argv_len = 8;
+            launch.argv_storage[3] = "-File";
+            launch.argv_storage[4] = resolved.path;
+            launch.argv_storage[5] = "login";
+            launch.argv_len = 6;
             if (opts.device_auth) {
-                launch.argv_storage[8] = "--device-auth";
-                launch.argv_len = 9;
+                launch.argv_storage[6] = "--device-auth";
+                launch.argv_len = 7;
             }
             return launch;
         },
@@ -375,7 +395,10 @@ fn writeCodexLoginLaunchFailureHint(err_name: []const u8) !void {
 fn shouldRetryWindowsCodexLaunch(err: std.process.SpawnError, kind: WindowsCodexPathKind) bool {
     return switch (err) {
         error.FileNotFound, error.AccessDenied => true,
-        error.InvalidExe => kind != .exe,
+        error.InvalidExe => switch (kind) {
+            .com, .exe => false,
+            .bat, .cmd, .ps1 => true,
+        },
         else => false,
     };
 }
