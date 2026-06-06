@@ -142,6 +142,10 @@ fn fakeCodexPowerShellPath() []const u8 {
     return "fake-bin/codex.ps1";
 }
 
+fn fakeCodexExePath() []const u8 {
+    return "fake-bin/codex.exe";
+}
+
 fn fakeBareWindowsCodexPath() []const u8 {
     return "fake-bin/codex";
 }
@@ -248,6 +252,20 @@ fn writeSuccessfulFakeCodexPowerShell(dir: fs.Dir) !void {
     try dir.writeFile(.{ .sub_path = fakeCodexPowerShellPath(), .data = script });
 }
 
+fn writeSuccessfulFakeCodexExe(
+    allocator: std.mem.Allocator,
+    dir: fs.Dir,
+    project_root: []const u8,
+) !void {
+    if (builtin.os.tag != .windows) return;
+
+    const built_fake_codex = try builtFakeCodexPathAlloc(allocator, project_root);
+    defer allocator.free(built_fake_codex);
+    const fake_codex_data = try fixtures.readFileAlloc(allocator, built_fake_codex);
+    defer allocator.free(fake_codex_data);
+    try dir.writeFile(.{ .sub_path = fakeCodexExePath(), .data = fake_codex_data });
+}
+
 fn fakeCurlCommandPath() []const u8 {
     return if (builtin.os.tag == .windows) "fake-curl-bin/curl.exe" else "fake-curl-bin/curl";
 }
@@ -321,6 +339,18 @@ fn builtFakeCurlPathAlloc(allocator: std.mem.Allocator, project_root: []const u8
 
 fn builtFakeCurlFailPathAlloc(allocator: std.mem.Allocator, project_root: []const u8) ![]u8 {
     const exe_name = if (builtin.os.tag == .windows) "curl-fail.exe" else "curl-fail";
+    const install_prefix = getEnvVarOwned(allocator, cli_integration_install_prefix_env) catch |err| switch (err) {
+        error.EnvironmentVariableNotFound => null,
+        else => return err,
+    };
+    defer if (install_prefix) |dir| allocator.free(dir);
+
+    const prefix = install_prefix orelse return fs.path.join(allocator, &[_][]const u8{ project_root, "zig-out", "bin", exe_name });
+    return fs.path.join(allocator, &[_][]const u8{ prefix, "bin", exe_name });
+}
+
+fn builtFakeCodexPathAlloc(allocator: std.mem.Allocator, project_root: []const u8) ![]u8 {
+    const exe_name = if (builtin.os.tag == .windows) "fake-codex.exe" else "fake-codex";
     const install_prefix = getEnvVarOwned(allocator, cli_integration_install_prefix_env) catch |err| switch (err) {
         error.EnvironmentVariableNotFound => null,
         else => return err,
@@ -983,6 +1013,115 @@ test "Scenario: Given only a PowerShell Windows codex wrapper when running login
     const fake_bin_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "fake-bin" });
     defer gpa.free(fake_bin_path);
     const path_override = try prependPathEntryAlloc(gpa, fake_bin_path);
+    defer gpa.free(path_override);
+
+    const result = try runCliWithIsolatedHomeAndPath(
+        gpa,
+        project_root,
+        home_root,
+        path_override,
+        &[_][]const u8{ "login", "--device-auth" },
+    );
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectSuccess(result);
+
+    const launcher_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "fake-codex-launcher.txt" });
+    defer gpa.free(launcher_path);
+    const launcher_data = try fixtures.readFileAlloc(gpa, launcher_path);
+    defer gpa.free(launcher_data);
+    try std.testing.expectEqualStrings("ps1", std.mem.trim(u8, launcher_data, " \r\n"));
+}
+
+test "Scenario: Given a winget-style Windows codex launcher when running login then codex.exe is launched" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+    try tmp.dir.makePath(".codex");
+    try tmp.dir.makePath("fake-bin");
+
+    const expected_email = "windows-exe@example.com";
+    const fake_auth = try fixtures.authJsonWithEmailPlan(gpa, expected_email, "plus");
+    defer gpa.free(fake_auth);
+    try tmp.dir.writeFile(.{ .sub_path = "fake-auth.json", .data = fake_auth });
+    try writeSuccessfulFakeCodexExe(gpa, tmp.dir, project_root);
+
+    const fake_bin_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "fake-bin" });
+    defer gpa.free(fake_bin_path);
+    const path_override = try prependPathEntryAlloc(gpa, fake_bin_path);
+    defer gpa.free(path_override);
+
+    const result = try runCliWithIsolatedHomeAndPath(
+        gpa,
+        project_root,
+        home_root,
+        path_override,
+        &[_][]const u8{ "login", "--device-auth" },
+    );
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectSuccess(result);
+
+    const launcher_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "fake-codex-launcher.txt" });
+    defer gpa.free(launcher_path);
+    const launcher_data = try fixtures.readFileAlloc(gpa, launcher_path);
+    defer gpa.free(launcher_data);
+    try std.testing.expectEqualStrings("exe", std.mem.trim(u8, launcher_data, " \r\n"));
+}
+
+test "Scenario: Given an earlier PowerShell launcher and a later exe launcher when running login then PATH order still picks ps1" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+    try tmp.dir.makePath(".codex");
+    try tmp.dir.makePath("ps1-bin");
+    try tmp.dir.makePath("exe-bin");
+
+    const expected_email = "windows-ps1-first@example.com";
+    const fake_auth = try fixtures.authJsonWithEmailPlan(gpa, expected_email, "plus");
+    defer gpa.free(fake_auth);
+    try tmp.dir.writeFile(.{ .sub_path = "fake-auth.json", .data = fake_auth });
+    try tmp.dir.writeFile(.{ .sub_path = "ps1-bin/codex", .data = "#!/bin/sh\nexit 99\n" });
+
+    const ps1_dir = try tmp.dir.openDir("ps1-bin", .{});
+    defer ps1_dir.close();
+    try writeSuccessfulFakeCodexPowerShell(ps1_dir);
+
+    const exe_dir = try tmp.dir.openDir("exe-bin", .{});
+    defer exe_dir.close();
+    try writeSuccessfulFakeCodexExe(gpa, exe_dir, project_root);
+
+    const ps1_bin_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "ps1-bin" });
+    defer gpa.free(ps1_bin_path);
+    const exe_bin_path = try fs.path.join(gpa, &[_][]const u8{ home_root, "exe-bin" });
+    defer gpa.free(exe_bin_path);
+    const exe_then_inherited_path = try prependPathEntryAlloc(gpa, exe_bin_path);
+    defer gpa.free(exe_then_inherited_path);
+    const path_override = try std.fmt.allocPrint(gpa, "{s}{c}{s}", .{
+        ps1_bin_path,
+        fs.path.delimiter,
+        exe_then_inherited_path,
+    });
     defer gpa.free(path_override);
 
     const result = try runCliWithIsolatedHomeAndPath(

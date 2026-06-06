@@ -880,7 +880,7 @@ test "Scenario: Given winget and npm Windows launchers when resolving then PATH 
     try std.testing.expect(std.mem.endsWith(u8, cmd_first.path, "codex.cmd"));
 }
 
-test "Scenario: Given both exe and cmd in one Windows directory when resolving then PATHEXT order decides which one wins" {
+test "Scenario: Given exe cmd and ps1 in one Windows directory when resolving then the fixed launcher priority wins" {
     const gpa = std.testing.allocator;
     var tmp = fs.tmpDir(.{});
     defer tmp.cleanup();
@@ -894,15 +894,10 @@ test "Scenario: Given both exe and cmd in one Windows directory when resolving t
     const mixed_dir = try std.fs.path.join(gpa, &[_][]const u8{ root_dir, "mixed-bin" });
     defer gpa.free(mixed_dir);
 
-    var cmd_first = (try cli.login.resolveWindowsCodexPathEntriesWithPathExtAlloc(gpa, &[_][]const u8{mixed_dir}, ".CMD;.EXE")) orelse return error.TestUnexpectedResult;
-    defer cmd_first.deinit(gpa);
-    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.cmd, cmd_first.kind);
-    try std.testing.expect(std.mem.endsWith(u8, cmd_first.path, "codex.cmd"));
-
-    var exe_first = (try cli.login.resolveWindowsCodexPathEntriesWithPathExtAlloc(gpa, &[_][]const u8{mixed_dir}, ".EXE;.CMD")) orelse return error.TestUnexpectedResult;
-    defer exe_first.deinit(gpa);
-    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.exe, exe_first.kind);
-    try std.testing.expect(std.mem.endsWith(u8, exe_first.path, "codex.exe"));
+    var resolved = (try cli.login.resolveWindowsCodexPathEntriesAlloc(gpa, &[_][]const u8{mixed_dir})) orelse return error.TestUnexpectedResult;
+    defer resolved.deinit(gpa);
+    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.exe, resolved.kind);
+    try std.testing.expect(std.mem.endsWith(u8, resolved.path, "codex.exe"));
 }
 
 test "Scenario: Given only the bare npm shell launcher on Windows when resolving then it is ignored" {
@@ -921,7 +916,7 @@ test "Scenario: Given only the bare npm shell launcher on Windows when resolving
     try std.testing.expect((try cli.login.resolveWindowsCodexPathEntriesAlloc(gpa, &[_][]const u8{npm_dir})) == null);
 }
 
-test "Scenario: Given an earlier PowerShell launcher and a later native Windows launcher when resolving then ps1 stays a global fallback" {
+test "Scenario: Given an earlier PowerShell launcher and a later native Windows launcher when resolving then PATH order still wins" {
     const gpa = std.testing.allocator;
     var tmp = fs.tmpDir(.{});
     defer tmp.cleanup();
@@ -939,15 +934,11 @@ test "Scenario: Given an earlier PowerShell launcher and a later native Windows 
     const winget_dir = try std.fs.path.join(gpa, &[_][]const u8{ root_dir, "winget-bin" });
     defer gpa.free(winget_dir);
 
-    var resolved = (try cli.login.resolveWindowsCodexPathEntriesWithPathExtAlloc(
-        gpa,
-        &[_][]const u8{ npm_dir, winget_dir },
-        ".EXE;.CMD",
-    )) orelse return error.TestUnexpectedResult;
+    var resolved = (try cli.login.resolveWindowsCodexPathEntriesAlloc(gpa, &[_][]const u8{ npm_dir, winget_dir })) orelse return error.TestUnexpectedResult;
     defer resolved.deinit(gpa);
 
-    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.exe, resolved.kind);
-    try std.testing.expect(std.mem.endsWith(u8, resolved.path, "codex.exe"));
+    try std.testing.expectEqual(cli.login.WindowsCodexPathKind.ps1, resolved.kind);
+    try std.testing.expect(std.mem.endsWith(u8, resolved.path, "codex.ps1"));
 }
 
 test "Scenario: Given only PowerShell Windows launcher when resolving then ps1 is used after cmd is absent" {

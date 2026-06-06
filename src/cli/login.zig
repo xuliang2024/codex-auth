@@ -61,18 +61,7 @@ pub fn resolveWindowsCodexPathEntryAlloc(
     allocator: std.mem.Allocator,
     entry: []const u8,
 ) !?WindowsCodexPath {
-    const path_ext = try resolveWindowsCodexPathExtAlloc(allocator);
-    defer allocator.free(path_ext);
-
-    return resolveWindowsCodexPathEntryWithPathExtAlloc(allocator, entry, path_ext);
-}
-
-pub fn resolveWindowsCodexPathEntriesWithPathExtAlloc(
-    allocator: std.mem.Allocator,
-    entries: []const []const u8,
-    path_ext: []const u8,
-) !?WindowsCodexPath {
-    var candidates = try collectWindowsCodexPathEntriesWithPathExtAlloc(allocator, entries, path_ext);
+    var candidates = try collectWindowsCodexPathEntriesAlloc(allocator, &[_][]const u8{entry});
     errdefer deinitWindowsCodexPathList(allocator, &candidates);
 
     if (candidates.items.len == 0) return null;
@@ -86,10 +75,14 @@ pub fn resolveWindowsCodexPathEntriesAlloc(
     allocator: std.mem.Allocator,
     entries: []const []const u8,
 ) !?WindowsCodexPath {
-    const path_ext = try resolveWindowsCodexPathExtAlloc(allocator);
-    defer allocator.free(path_ext);
+    var candidates = try collectWindowsCodexPathEntriesAlloc(allocator, entries);
+    errdefer deinitWindowsCodexPathList(allocator, &candidates);
 
-    return resolveWindowsCodexPathEntriesWithPathExtAlloc(allocator, entries, path_ext);
+    if (candidates.items.len == 0) return null;
+
+    const resolved = candidates.orderedRemove(0);
+    deinitWindowsCodexPathList(allocator, &candidates);
+    return resolved;
 }
 
 fn resolvePathEntryCandidateAlloc(
@@ -116,19 +109,6 @@ fn windowsCodexCandidateName(kind: WindowsCodexPathKind) []const u8 {
     };
 }
 
-fn windowsCodexPathExtKind(ext: []const u8) ?WindowsCodexPathKind {
-    if (std.ascii.eqlIgnoreCase(ext, ".exe")) return .exe;
-    if (std.ascii.eqlIgnoreCase(ext, ".cmd")) return .cmd;
-    return null;
-}
-
-fn resolveWindowsCodexPathExtAlloc(allocator: std.mem.Allocator) ![]u8 {
-    return http_env.getEnvVarOwned(allocator, "PATHEXT") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => try allocator.dupe(u8, ".EXE;.CMD"),
-        else => return err,
-    };
-}
-
 fn appendWindowsCodexPathCandidateIfAvailable(
     allocator: std.mem.Allocator,
     candidates: *WindowsCodexPathList,
@@ -142,36 +122,12 @@ fn appendWindowsCodexPathCandidateIfAvailable(
 
 fn appendWindowsCodexPathEntryCandidatesAlloc(
     allocator: std.mem.Allocator,
-    native_candidates: *WindowsCodexPathList,
-    ps1_candidates: *WindowsCodexPathList,
+    candidates: *WindowsCodexPathList,
     entry: []const u8,
-    path_ext: []const u8,
-    allow_ps1: bool,
 ) !void {
-    var seen_exe = false;
-    var seen_cmd = false;
-
-    var ext_it = std.mem.splitScalar(u8, path_ext, ';');
-    while (ext_it.next()) |raw_ext| {
-        const ext = std.mem.trim(u8, raw_ext, " \t");
-        const kind = windowsCodexPathExtKind(ext) orelse continue;
-        switch (kind) {
-            .exe => {
-                if (seen_exe) continue;
-                seen_exe = true;
-            },
-            .cmd => {
-                if (seen_cmd) continue;
-                seen_cmd = true;
-            },
-            .ps1 => unreachable,
-        }
-        try appendWindowsCodexPathCandidateIfAvailable(allocator, native_candidates, entry, kind);
-    }
-
-    if (allow_ps1) {
-        try appendWindowsCodexPathCandidateIfAvailable(allocator, ps1_candidates, entry, .ps1);
-    }
+    try appendWindowsCodexPathCandidateIfAvailable(allocator, candidates, entry, .exe);
+    try appendWindowsCodexPathCandidateIfAvailable(allocator, candidates, entry, .cmd);
+    try appendWindowsCodexPathCandidateIfAvailable(allocator, candidates, entry, .ps1);
 }
 
 fn deinitWindowsCodexPathList(allocator: std.mem.Allocator, candidates: *WindowsCodexPathList) void {
@@ -179,59 +135,19 @@ fn deinitWindowsCodexPathList(allocator: std.mem.Allocator, candidates: *Windows
     candidates.deinit(allocator);
 }
 
-fn appendWindowsCodexPathLists(
-    allocator: std.mem.Allocator,
-    dst: *WindowsCodexPathList,
-    src: *WindowsCodexPathList,
-) !void {
-    try dst.appendSlice(allocator, src.items);
-    src.clearRetainingCapacity();
-}
-
-fn collectWindowsCodexPathEntriesWithPathExtAlloc(
+fn collectWindowsCodexPathEntriesAlloc(
     allocator: std.mem.Allocator,
     entries: []const []const u8,
-    path_ext: []const u8,
 ) !WindowsCodexPathList {
-    var native_candidates: WindowsCodexPathList = .empty;
-    errdefer deinitWindowsCodexPathList(allocator, &native_candidates);
-    var ps1_candidates: WindowsCodexPathList = .empty;
-    errdefer deinitWindowsCodexPathList(allocator, &ps1_candidates);
+    var candidates: WindowsCodexPathList = .empty;
+    errdefer deinitWindowsCodexPathList(allocator, &candidates);
 
     for (entries) |entry| {
         if (entry.len == 0) continue;
-        try appendWindowsCodexPathEntryCandidatesAlloc(
-            allocator,
-            &native_candidates,
-            &ps1_candidates,
-            entry,
-            path_ext,
-            true,
-        );
+        try appendWindowsCodexPathEntryCandidatesAlloc(allocator, &candidates, entry);
     }
 
-    try appendWindowsCodexPathLists(allocator, &native_candidates, &ps1_candidates);
-    ps1_candidates.deinit(allocator);
-    return native_candidates;
-}
-
-fn resolveWindowsCodexPathEntryWithPathExtAlloc(
-    allocator: std.mem.Allocator,
-    entry: []const u8,
-    path_ext: []const u8,
-) !?WindowsCodexPath {
-    var candidates = try collectWindowsCodexPathEntriesWithPathExtAlloc(
-        allocator,
-        &[_][]const u8{entry},
-        path_ext,
-    );
-    errdefer deinitWindowsCodexPathList(allocator, &candidates);
-
-    if (candidates.items.len == 0) return null;
-
-    const resolved = candidates.orderedRemove(0);
-    deinitWindowsCodexPathList(allocator, &candidates);
-    return resolved;
+    return candidates;
 }
 
 fn accessPath(path: []const u8) bool {
@@ -247,62 +163,27 @@ fn accessPath(path: []const u8) bool {
 fn resolveWindowsCodexPathValueAlloc(
     allocator: std.mem.Allocator,
     path_value: []const u8,
-    path_ext: []const u8,
-    native_candidates: *WindowsCodexPathList,
-    ps1_candidates: *WindowsCodexPathList,
+    candidates: *WindowsCodexPathList,
 ) !void {
     var path_it = std.mem.splitScalar(u8, path_value, std.fs.path.delimiter);
     while (path_it.next()) |entry| {
         if (entry.len == 0) continue;
-        try appendWindowsCodexPathEntryCandidatesAlloc(
-            allocator,
-            native_candidates,
-            ps1_candidates,
-            entry,
-            path_ext,
-            true,
-        );
+        try appendWindowsCodexPathEntryCandidatesAlloc(allocator, candidates, entry);
     }
 }
 
 fn collectWindowsCodexPathsAlloc(allocator: std.mem.Allocator) !WindowsCodexPathList {
-    const path_ext = try resolveWindowsCodexPathExtAlloc(allocator);
-    defer allocator.free(path_ext);
-
-    var native_candidates: WindowsCodexPathList = .empty;
-    errdefer deinitWindowsCodexPathList(allocator, &native_candidates);
-    var ps1_candidates: WindowsCodexPathList = .empty;
-    errdefer deinitWindowsCodexPathList(allocator, &ps1_candidates);
-
-    try appendWindowsCodexPathEntryCandidatesAlloc(
-        allocator,
-        &native_candidates,
-        &ps1_candidates,
-        ".",
-        path_ext,
-        false,
-    );
+    var candidates: WindowsCodexPathList = .empty;
+    errdefer deinitWindowsCodexPathList(allocator, &candidates);
 
     const path_value = http_env.getEnvVarOwned(allocator, "PATH") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => {
-            try appendWindowsCodexPathLists(allocator, &native_candidates, &ps1_candidates);
-            ps1_candidates.deinit(allocator);
-            return native_candidates;
-        },
+        error.EnvironmentVariableNotFound => return candidates,
         else => return err,
     };
     defer allocator.free(path_value);
 
-    try resolveWindowsCodexPathValueAlloc(
-        allocator,
-        path_value,
-        path_ext,
-        &native_candidates,
-        &ps1_candidates,
-    );
-    try appendWindowsCodexPathLists(allocator, &native_candidates, &ps1_candidates);
-    ps1_candidates.deinit(allocator);
-    return native_candidates;
+    try resolveWindowsCodexPathValueAlloc(allocator, path_value, &candidates);
+    return candidates;
 }
 
 fn resolveOptionalExecutableAlloc(
