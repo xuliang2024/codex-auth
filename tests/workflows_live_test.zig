@@ -34,6 +34,10 @@ test "handled cli errors include missing curl" {
     try std.testing.expect(isHandledCliError(error.CurlRequired));
 }
 
+test "handled cli errors include missing PowerShell for codex ps1 launcher" {
+    try std.testing.expect(isHandledCliError(error.PowerShellNotFound));
+}
+
 test "curl preflight skips api key only usage refreshes" {
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});

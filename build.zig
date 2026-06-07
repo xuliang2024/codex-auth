@@ -42,10 +42,30 @@ pub fn build(b: *std.Build) void {
         .root_module = fake_curl_fail_module,
     });
     const install_fake_curl_fail = b.addInstallArtifact(fake_curl_fail_exe, .{});
+    const fake_codex_module = b.createModule(.{
+        .root_source_file = b.path("tests/fake_codex.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "app_runtime", .module = b.createModule(.{
+                .root_source_file = b.path("src/core/runtime.zig"),
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }) },
+        },
+    });
+    const fake_codex_exe = b.addExecutable(.{
+        .name = "fake-codex",
+        .root_module = fake_codex_module,
+    });
+    const install_fake_codex = b.addInstallArtifact(fake_codex_exe, .{});
     const test_helpers_step = b.step("test-helpers", "Install test helper binaries");
     test_helpers_step.dependOn(b.getInstallStep());
     test_helpers_step.dependOn(&install_fake_curl.step);
     test_helpers_step.dependOn(&install_fake_curl_fail.step);
+    test_helpers_step.dependOn(&install_fake_codex.step);
 
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
