@@ -419,6 +419,7 @@ pub fn runCodexLogin(opts: types.LoginOptions, codex_home: []const u8) !void {
                         .stderr = .inherit,
                     }) catch |err| {
                         if (candidate.kind == .ps1 and launchUsesWindowsPowerShellHost(&launch) and err == error.AccessDenied) {
+                            last_retryable_spawn_error = err;
                             launch.deinit(std.heap.page_allocator);
                             launch = buildWindowsPowerShellCodexLaunchAlloc(
                                 std.heap.page_allocator,
