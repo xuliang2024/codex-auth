@@ -290,13 +290,15 @@ fn buildWindowsPowerShellCodexLaunchAlloc(
     launch.argv_storage[0] = powershell;
     launch.argv_storage[1] = "-NoLogo";
     launch.argv_storage[2] = "-NoProfile";
-    launch.argv_storage[3] = "-File";
-    launch.argv_storage[4] = script_path;
-    launch.argv_storage[5] = "login";
-    launch.argv_len = 6;
+    launch.argv_storage[3] = "-ExecutionPolicy";
+    launch.argv_storage[4] = "Bypass";
+    launch.argv_storage[5] = "-File";
+    launch.argv_storage[6] = script_path;
+    launch.argv_storage[7] = "login";
+    launch.argv_len = 8;
     if (opts.device_auth) {
-        launch.argv_storage[6] = "--device-auth";
-        launch.argv_len = 7;
+        launch.argv_storage[8] = "--device-auth";
+        launch.argv_len = 9;
     }
     return launch;
 }
