@@ -370,6 +370,7 @@ fn parsePlanType(v: std.json.Value) ?registry.PlanType {
     };
 
     if (std.ascii.eqlIgnoreCase(plan_name, "free")) return .free;
+    if (std.ascii.eqlIgnoreCase(plan_name, "go")) return .go;
     if (std.ascii.eqlIgnoreCase(plan_name, "plus")) return .plus;
     if (std.ascii.eqlIgnoreCase(plan_name, "prolite")) return .prolite;
     if (std.ascii.eqlIgnoreCase(plan_name, "pro")) return .pro;

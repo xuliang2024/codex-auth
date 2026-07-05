@@ -139,13 +139,14 @@ fn lessThanByDisplayOrder(ctx: SortContext, lhs: usize, rhs: usize) bool {
 fn planSortRank(plan: ?registry.PlanType) u8 {
     return switch (plan orelse .unknown) {
         .team, .business, .enterprise, .edu => 0,
-        .free, .plus, .prolite, .pro => 1,
+        .free, .go, .plus, .prolite, .pro => 1,
         else => 2,
     };
 }
 
 fn displayPlan(rec: *const registry.AccountRecord) []const u8 {
     if (rec.auth_mode != null and rec.auth_mode.? == .apikey) return "API_KEY";
+    if (rec.auth_mode != null and rec.auth_mode.? == .provider) return "API";
     return if (registry.resolveDisplayPlan(rec)) |plan| registry.planLabel(plan) else "-";
 }
 

@@ -830,7 +830,9 @@ test "Scenario: Given login help when rendering then device auth usage is includ
 
     const help = aw.written();
     try std.testing.expect(std.mem.indexOf(u8, help, "codex-auth login --device-auth") != null);
-    try std.testing.expect(std.mem.indexOf(u8, help, "Options:\n  --device-auth   Run `codex login --device-auth` before adding the account.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "--device-auth              Run `codex login --device-auth` before adding the account.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "codex-auth login --api --base-url") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help, "--key <api-key>") != null);
 }
 
 test "Scenario: Given login options when building codex argv then device auth is forwarded" {

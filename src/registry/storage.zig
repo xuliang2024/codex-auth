@@ -453,7 +453,7 @@ pub fn loadRegistry(allocator: std.mem.Allocator, codex_home: []const u8) !Regis
         (schema_version == current_schema_version and currentLayoutNeedsRewrite(root_obj));
     var reg = switch (schema_version) {
         2 => try loadLegacyRegistryV2(allocator, codex_home, root_obj),
-        3, 4 => try loadCurrentRegistry(allocator, root_obj),
+        3, 4, 5 => try loadCurrentRegistry(allocator, root_obj),
         else => {
             std.log.err(
                 "registry schema_version {d} is older than the minimum supported {d}; use an intermediate codex-auth release or import --purge",

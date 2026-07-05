@@ -69,6 +69,9 @@ pub fn parseAccountRecord(allocator: std.mem.Allocator, obj: std.json.ObjectMap)
     if (obj.get("last_local_rollout")) |v| {
         rec.last_local_rollout = parseRolloutSignature(allocator, v);
     }
+    if (obj.get("provider")) |v| {
+        rec.provider = parse.parseProviderConfig(allocator, v);
+    }
     return rec;
 }
 

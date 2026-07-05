@@ -450,6 +450,43 @@ pub fn printSwitchedAccount(
     try out.flush();
 }
 
+pub fn printApiLoginSuccess(host: []const u8, provider_id: []const u8, base_url: []const u8) !void {
+    var stdout: io_util.Stdout = undefined;
+    stdout.init();
+    const out = stdout.out();
+    const use_color = stdout.color_enabled;
+    if (use_color) try out.writeAll(style.ansi.green);
+    try out.print("Added API provider account {s} and switched to it\n", .{host});
+    if (use_color) try out.writeAll(style.ansi.reset);
+    try out.print("  provider: {s}\n  base_url: {s}\n", .{ provider_id, base_url });
+    try out.writeAll("  config.toml now routes Codex through this provider.\n");
+    try out.flush();
+}
+
+pub fn printApiLoginInvalidBaseUrlError(raw: []const u8) !void {
+    var stderr: io_util.Stderr = undefined;
+    stderr.init();
+    const out = stderr.out();
+    const use_color = stderr.color_enabled;
+    try writeErrorPrefixTo(out, use_color);
+    try out.print(" invalid `--base-url` value '{s}'.\n", .{raw});
+    try writeHintPrefixTo(out, use_color);
+    try out.writeAll(" Use a full endpoint URL such as `https://codex.example.com`.\n");
+    try out.flush();
+}
+
+pub fn printApiLoginInvalidNameError(raw: []const u8) !void {
+    var stderr: io_util.Stderr = undefined;
+    stderr.init();
+    const out = stderr.out();
+    const use_color = stderr.color_enabled;
+    try writeErrorPrefixTo(out, use_color);
+    try out.print(" invalid provider name '{s}'.\n", .{raw});
+    try writeHintPrefixTo(out, use_color);
+    try out.writeAll(" Provider names may only contain letters, digits, `-`, and `_`.\n");
+    try out.flush();
+}
+
 pub fn writeCodexLoginLaunchFailureHintTo(out: *std.Io.Writer, err_name: []const u8, use_color: bool) !void {
     try writeErrorPrefixTo(out, use_color);
     if (std.mem.eql(u8, err_name, "FileNotFound")) {

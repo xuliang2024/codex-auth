@@ -6,9 +6,9 @@ const c_time = @cImport({
     @cInclude("time.h");
 });
 
-pub const PlanType = enum { free, plus, prolite, pro, team, business, enterprise, edu, unknown };
-pub const AuthMode = enum { chatgpt, apikey };
-pub const current_schema_version: u32 = 4;
+pub const PlanType = enum { free, go, plus, prolite, pro, team, business, enterprise, edu, unknown };
+pub const AuthMode = enum { chatgpt, apikey, provider };
+pub const current_schema_version: u32 = 5;
 pub const min_supported_schema_version: u32 = 2;
 pub const private_file_permissions: std.Io.File.Permissions = switch (builtin.os.tag) {
     .windows => .default_file,
@@ -77,6 +77,38 @@ pub const RolloutSignature = struct {
     event_timestamp_ms: i64,
 };
 
+/// Custom API provider (endpoint + key) settings mirrored into
+/// `config.toml` while the account is active.
+pub const ProviderConfig = struct {
+    id: []u8,
+    base_url: []u8,
+    model: ?[]u8,
+    model_reasoning_effort: ?[]u8,
+};
+
+pub fn freeProviderConfig(allocator: std.mem.Allocator, provider: *const ProviderConfig) void {
+    allocator.free(provider.id);
+    allocator.free(provider.base_url);
+    if (provider.model) |value| allocator.free(value);
+    if (provider.model_reasoning_effort) |value| allocator.free(value);
+}
+
+pub fn cloneProviderConfig(allocator: std.mem.Allocator, provider: ProviderConfig) !ProviderConfig {
+    const id = try allocator.dupe(u8, provider.id);
+    errdefer allocator.free(id);
+    const base_url = try allocator.dupe(u8, provider.base_url);
+    errdefer allocator.free(base_url);
+    const model = try cloneOptionalStringAlloc(allocator, provider.model);
+    errdefer if (model) |value| allocator.free(value);
+    const model_reasoning_effort = try cloneOptionalStringAlloc(allocator, provider.model_reasoning_effort);
+    return .{
+        .id = id,
+        .base_url = base_url,
+        .model = model,
+        .model_reasoning_effort = model_reasoning_effort,
+    };
+}
+
 pub const ApiConfig = struct {
     usage: bool = true,
     account: bool = true,
@@ -104,6 +136,7 @@ pub const AccountRecord = struct {
     last_usage: ?RateLimitSnapshot,
     last_usage_at: ?i64,
     last_local_rollout: ?RolloutSignature,
+    provider: ?ProviderConfig = null,
 };
 
 pub fn resolvePlan(rec: *const AccountRecord) ?PlanType {
@@ -122,6 +155,7 @@ pub fn resolveDisplayPlan(rec: *const AccountRecord) ?PlanType {
 pub fn planLabel(plan: PlanType) []const u8 {
     return switch (plan) {
         .free => "Free",
+        .go => "Go",
         .plus => "Plus",
         .prolite => "Pro Lite",
         .pro => "Pro",
@@ -171,6 +205,7 @@ pub fn freeAccountRecord(allocator: std.mem.Allocator, rec: *const AccountRecord
     if (rec.last_usage) |*u| {
         freeRateLimitSnapshot(allocator, u);
     }
+    if (rec.provider) |*provider| freeProviderConfig(allocator, provider);
 }
 
 pub fn freeRateLimitSnapshot(allocator: std.mem.Allocator, snapshot: *const RateLimitSnapshot) void {

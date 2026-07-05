@@ -328,6 +328,7 @@ fn base64UrlNoPadDecode(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 
 fn parsePlanType(s: []const u8) registry.PlanType {
     if (std.ascii.eqlIgnoreCase(s, "free")) return .free;
+    if (std.ascii.eqlIgnoreCase(s, "go")) return .go;
     if (std.ascii.eqlIgnoreCase(s, "plus")) return .plus;
     if (std.ascii.eqlIgnoreCase(s, "prolite")) return .prolite;
     if (std.ascii.eqlIgnoreCase(s, "pro")) return .pro;

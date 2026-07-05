@@ -39,6 +39,7 @@ pub fn writeHelp(
     try writeCommandSummary(out, use_color, "-", "Switch to the previous active account");
     try writeCommandSummary(out, use_color, "list [--live] [--active] [--api|--skip-api]", "List available accounts");
     try writeCommandSummary(out, use_color, "login [--device-auth]", "Login and add the current account");
+    try writeCommandDetail(out, use_color, "login --api --base-url <url> --key <api-key> [--name <name>]");
     try writeCommandSummary(out, use_color, "import", "Import auth files or rebuild registry");
     try writeCommandDetail(out, use_color, "import <path> [--alias <alias>]");
     try writeCommandDetail(out, use_color, "import --cpa [<path>] [--alias <alias>]");
@@ -197,6 +198,7 @@ fn writeUsageLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         .login => {
             try out.writeAll("  codex-auth login\n");
             try out.writeAll("  codex-auth login --device-auth\n");
+            try out.writeAll("  codex-auth login --api --base-url <url> --key <api-key> [--name <name>] [--model <model>] [--reasoning-effort <level>]\n");
         },
         .import_auth => {
             try out.writeAll("  codex-auth import <path> [--alias <alias>]\n");
@@ -265,7 +267,13 @@ fn writeOptionLines(out: *std.Io.Writer, topic: HelpTopic) !void {
             try out.writeAll("  --skip-api   Load usage and account data from local data only (may be inaccurate).\n");
         },
         .login => {
-            try out.writeAll("  --device-auth   Run `codex login --device-auth` before adding the account.\n");
+            try out.writeAll("  --device-auth              Run `codex login --device-auth` before adding the account.\n");
+            try out.writeAll("  --api                      Add an API provider account (custom endpoint + API key) instead of ChatGPT sign-in.\n");
+            try out.writeAll("  --base-url <url>           Provider endpoint, for example `https://codex.example.com`. Requires `--api`.\n");
+            try out.writeAll("  --key <api-key>            API key for the provider. Requires `--api`.\n");
+            try out.writeAll("  --name <name>              Optional provider name used in config.toml and as the account alias.\n");
+            try out.writeAll("  --model <model>            Optional model written to config.toml while this account is active.\n");
+            try out.writeAll("  --reasoning-effort <level> Optional reasoning effort written to config.toml while this account is active.\n");
         },
         .import_auth => {
             try out.writeAll("  <path>           Import one auth file or every supported auth file in a directory.\n");
@@ -340,6 +348,7 @@ fn writeExampleLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         .login => {
             try out.writeAll("  codex-auth login\n");
             try out.writeAll("  codex-auth login --device-auth\n");
+            try out.writeAll("  codex-auth login --api --base-url https://codex.example.com --key sk-xxxx --name myapi --model gpt-5.5\n");
         },
         .import_auth => {
             try out.writeAll("  codex-auth import /path/to/auth.json --alias personal\n");

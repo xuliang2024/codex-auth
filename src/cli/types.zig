@@ -9,8 +9,16 @@ pub const ListOptions = struct {
     api_mode: ApiMode = .default,
     active_only: bool = false,
 };
+pub const ApiLoginOptions = struct {
+    base_url: []u8,
+    key: []u8,
+    name: ?[]u8 = null,
+    model: ?[]u8 = null,
+    reasoning_effort: ?[]u8 = null,
+};
 pub const LoginOptions = struct {
     device_auth: bool = false,
+    api: ?ApiLoginOptions = null,
 };
 pub const ImportSource = enum { standard, cpa };
 pub const ImportOptions = struct {

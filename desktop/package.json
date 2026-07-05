@@ -1,0 +1,32 @@
+{
+  "name": "codex-auth-desktop",
+  "version": "0.1.0",
+  "description": "Desktop account switcher for codex-auth",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.loongphy.codex-auth-desktop",
+    "productName": "Codex Auth",
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "renderer/**"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

@@ -11,6 +11,7 @@ const CreditsSnapshot = common.CreditsSnapshot;
 
 pub fn parsePlanType(s: []const u8) ?PlanType {
     if (std.mem.eql(u8, s, "free")) return .free;
+    if (std.mem.eql(u8, s, "go")) return .go;
     if (std.mem.eql(u8, s, "plus")) return .plus;
     if (std.mem.eql(u8, s, "prolite")) return .prolite;
     if (std.mem.eql(u8, s, "pro")) return .pro;
@@ -24,7 +25,53 @@ pub fn parsePlanType(s: []const u8) ?PlanType {
 pub fn parseAuthMode(s: []const u8) ?AuthMode {
     if (std.mem.eql(u8, s, "chatgpt")) return .chatgpt;
     if (std.mem.eql(u8, s, "apikey")) return .apikey;
+    if (std.mem.eql(u8, s, "provider")) return .provider;
     return null;
+}
+
+pub fn parseProviderConfig(allocator: std.mem.Allocator, v: std.json.Value) ?common.ProviderConfig {
+    const obj = switch (v) {
+        .object => |o| o,
+        else => return null,
+    };
+    const id = switch (obj.get("id") orelse return null) {
+        .string => |s| s,
+        else => return null,
+    };
+    const base_url = switch (obj.get("base_url") orelse return null) {
+        .string => |s| s,
+        else => return null,
+    };
+    if (id.len == 0 or base_url.len == 0) return null;
+
+    const owned_id = allocator.dupe(u8, id) catch return null;
+    const owned_base_url = allocator.dupe(u8, base_url) catch {
+        allocator.free(owned_id);
+        return null;
+    };
+    var provider = common.ProviderConfig{
+        .id = owned_id,
+        .base_url = owned_base_url,
+        .model = null,
+        .model_reasoning_effort = null,
+    };
+    if (obj.get("model")) |m| {
+        switch (m) {
+            .string => |s| if (s.len > 0) {
+                provider.model = allocator.dupe(u8, s) catch null;
+            },
+            else => {},
+        }
+    }
+    if (obj.get("model_reasoning_effort")) |m| {
+        switch (m) {
+            .string => |s| if (s.len > 0) {
+                provider.model_reasoning_effort = allocator.dupe(u8, s) catch null;
+            },
+            else => {},
+        }
+    }
+    return provider;
 }
 
 pub fn parseUsage(allocator: std.mem.Allocator, v: std.json.Value) ?RateLimitSnapshot {

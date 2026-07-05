@@ -34,7 +34,8 @@ const ForegroundUsageWorkerResult = struct {
 };
 
 pub fn shouldRefreshChatGptUsageForAccount(rec: *const registry.AccountRecord) bool {
-    return rec.auth_mode == null or rec.auth_mode.? != .apikey;
+    const mode = rec.auth_mode orelse return true;
+    return mode == .chatgpt;
 }
 
 fn skipsChatGptUsage(rec: *const registry.AccountRecord) bool {

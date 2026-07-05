@@ -4,6 +4,7 @@ const account_api = @import("../api/account.zig");
 const me_api = @import("../api/me.zig");
 const common = @import("common.zig");
 const clean = @import("clean.zig");
+const provider_toml = @import("provider_toml.zig");
 
 const PlanType = common.PlanType;
 const RateLimitWindow = common.RateLimitWindow;
@@ -32,6 +33,38 @@ pub fn apiKeyAccountKeyAlloc(allocator: std.mem.Allocator, user_id: []const u8, 
     std.crypto.hash.sha2.Sha256.hash(api_key, &digest, .{});
     const hex = std.fmt.bytesToHex(digest, .lower);
     return std.fmt.allocPrint(allocator, "apikey::{s}::{s}", .{ user_id, hex[0..] });
+}
+
+pub fn apiKeyHashHexAlloc(allocator: std.mem.Allocator, api_key: []const u8) ![]u8 {
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(api_key, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    return allocator.dupe(u8, hex[0..]);
+}
+
+pub fn providerAccountKeyAlloc(allocator: std.mem.Allocator, host: []const u8, api_key: []const u8) ![]u8 {
+    const hex = try apiKeyHashHexAlloc(allocator, api_key);
+    defer allocator.free(hex);
+    return std.fmt.allocPrint(allocator, "provider::{s}::{s}", .{ host, hex });
+}
+
+/// Finds a provider account whose stored key hash matches the given API key.
+pub fn findProviderAccountIndexByApiKey(
+    allocator: std.mem.Allocator,
+    reg: *Registry,
+    api_key: []const u8,
+) !?usize {
+    const hex = try apiKeyHashHexAlloc(allocator, api_key);
+    defer allocator.free(hex);
+    for (reg.accounts.items, 0..) |rec, i| {
+        if (rec.auth_mode == null or rec.auth_mode.? != .provider) continue;
+        if (std.mem.endsWith(u8, rec.account_key, hex) and
+            std.mem.startsWith(u8, rec.account_key, "provider::"))
+        {
+            return i;
+        }
+    }
+    return null;
 }
 
 pub fn apiKeyAccountNameAlloc(allocator: std.mem.Allocator, api_key: []const u8) ![]u8 {
@@ -220,6 +253,22 @@ fn syncActiveApiKeyAccountFromAuth(
         std.log.warn("auth.json missing OPENAI_API_KEY; skipping sync", .{});
         return false;
     };
+
+    // A provider account (custom endpoint) stores the same auth.json shape;
+    // match it by key hash first so we never probe the official /v1/me
+    // endpoint with a relay key.
+    if (try findProviderAccountIndexByApiKey(allocator, reg, api_key)) |provider_idx| {
+        const rec_account_key = reg.accounts.items[provider_idx].account_key;
+        var changed = false;
+        if (reg.active_account_key) |k| {
+            if (!std.mem.eql(u8, k, rec_account_key)) changed = true;
+        } else {
+            changed = true;
+        }
+        try setActiveAccountKeyPreservingPrevious(allocator, reg, rec_account_key);
+        return changed;
+    }
+
     var me = me_api.fetchMeForApiKey(allocator, api_key) catch |err| switch (err) {
         error.OutOfMemory => return err,
         else => {
@@ -303,9 +352,11 @@ pub fn removeAccounts(allocator: std.mem.Allocator, codex_home: []const u8, reg:
 
     if (reg.active_account_key) |key| {
         var active_removed = false;
+        var active_had_provider = false;
         for (reg.accounts.items, 0..) |rec, i| {
             if (removed[i] and std.mem.eql(u8, rec.account_key, key)) {
                 active_removed = true;
+                active_had_provider = rec.provider != null;
                 break;
             }
         }
@@ -313,6 +364,11 @@ pub fn removeAccounts(allocator: std.mem.Allocator, codex_home: []const u8, reg:
             allocator.free(key);
             reg.active_account_key = null;
             reg.active_account_activated_at_ms = null;
+            if (active_had_provider) {
+                provider_toml.removeProviderFromConfigFile(allocator, codex_home) catch |err| {
+                    std.log.warn("failed to clean provider settings from config.toml: {s}", .{@errorName(err)});
+                };
+            }
         }
     }
 
@@ -518,6 +574,17 @@ pub fn applyAccountNamesForUser(
     return changed;
 }
 
+fn syncProviderConfigForActiveAccount(
+    allocator: std.mem.Allocator,
+    codex_home: []const u8,
+    reg: *Registry,
+    account_key: []const u8,
+) !void {
+    const idx = findAccountIndexByAccountKey(reg, account_key) orelse return;
+    const provider: ?*const common.ProviderConfig = if (reg.accounts.items[idx].provider) |*p| p else null;
+    try provider_toml.syncConfigForAccount(allocator, codex_home, provider);
+}
+
 pub fn activateAccountByKey(
     allocator: std.mem.Allocator,
     codex_home: []const u8,
@@ -534,6 +601,7 @@ pub fn activateAccountByKey(
     try backupAuthIfChanged(allocator, codex_home, dest, src);
     try replaceFilePreservingPermissions(src, dest);
     try setActiveAccountKey(allocator, reg, account_key);
+    try syncProviderConfigForActiveAccount(allocator, codex_home, reg, account_key);
 }
 
 pub fn replaceActiveAuthWithAccountByKey(
@@ -552,6 +620,7 @@ pub fn replaceActiveAuthWithAccountByKey(
     try ensureAccountsDir(allocator, codex_home);
     try replaceFilePreservingPermissions(src, dest);
     try setActiveAccountKey(allocator, reg, account_key);
+    try syncProviderConfigForActiveAccount(allocator, codex_home, reg, account_key);
 }
 
 pub fn replaceActiveAuthWithAccountByKeyPreservingPrevious(
@@ -570,6 +639,7 @@ pub fn replaceActiveAuthWithAccountByKeyPreservingPrevious(
     try ensureAccountsDir(allocator, codex_home);
     try replaceFilePreservingPermissions(src, dest);
     try setActiveAccountKeyPreservingPrevious(allocator, reg, account_key);
+    try syncProviderConfigForActiveAccount(allocator, codex_home, reg, account_key);
 }
 
 pub fn accountFromAuth(
@@ -645,6 +715,46 @@ pub fn accountFromApiKeyMe(
     };
 }
 
+/// Builds a record for a custom API provider account. Takes ownership of
+/// `provider` on success.
+pub fn accountFromProvider(
+    allocator: std.mem.Allocator,
+    alias: []const u8,
+    host: []const u8,
+    api_key: []const u8,
+    provider: common.ProviderConfig,
+) !AccountRecord {
+    const owned_record_key = try providerAccountKeyAlloc(allocator, host, api_key);
+    errdefer allocator.free(owned_record_key);
+    const owned_email = try allocator.dupe(u8, host);
+    errdefer allocator.free(owned_email);
+    const owned_alias = try allocator.dupe(u8, alias);
+    errdefer allocator.free(owned_alias);
+    const owned_account_name = try apiKeyAccountNameAlloc(allocator, api_key);
+    errdefer allocator.free(owned_account_name);
+    const owned_chatgpt_account_id = try allocator.dupe(u8, "");
+    errdefer allocator.free(owned_chatgpt_account_id);
+    const owned_chatgpt_user_id = try allocator.dupe(u8, "");
+    errdefer allocator.free(owned_chatgpt_user_id);
+
+    return AccountRecord{
+        .account_key = owned_record_key,
+        .chatgpt_account_id = owned_chatgpt_account_id,
+        .chatgpt_user_id = owned_chatgpt_user_id,
+        .email = owned_email,
+        .alias = owned_alias,
+        .account_name = owned_account_name,
+        .plan = null,
+        .auth_mode = .provider,
+        .created_at = std.Io.Timestamp.now(app_runtime.io(), .real).toSeconds(),
+        .last_used_at = null,
+        .last_usage = null,
+        .last_usage_at = null,
+        .last_local_rollout = null,
+        .provider = provider,
+    };
+}
+
 pub fn recordFreshness(rec: *const AccountRecord) i64 {
     var best = rec.created_at;
     if (rec.last_used_at) |t| {
@@ -662,6 +772,10 @@ pub fn mergeAccountRecord(allocator: std.mem.Allocator, dest: *AccountRecord, in
         if (merged_incoming.account_name == null and dest.account_name != null) {
             merged_incoming.account_name = cloneOptionalStringAlloc(allocator, dest.account_name) catch unreachable;
         }
+        if (merged_incoming.provider == null and dest.provider != null) {
+            merged_incoming.provider = dest.provider;
+            dest.provider = null;
+        }
         freeAccountRecord(allocator, dest);
         dest.* = merged_incoming;
         return;
@@ -676,6 +790,13 @@ pub fn mergeAccountRecord(allocator: std.mem.Allocator, dest: *AccountRecord, in
     }
     if (dest.plan == null) dest.plan = merged_incoming.plan;
     if (dest.auth_mode == null) dest.auth_mode = merged_incoming.auth_mode;
+    if (merged_incoming.provider != null) {
+        // Provider settings come from an explicit re-login, so the incoming
+        // endpoint configuration always wins.
+        if (dest.provider) |*old| common.freeProviderConfig(allocator, old);
+        dest.provider = merged_incoming.provider;
+        merged_incoming.provider = null;
+    }
     freeAccountRecord(allocator, &merged_incoming);
 }
 

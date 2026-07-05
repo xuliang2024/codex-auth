@@ -72,6 +72,15 @@ pub fn freeParseResult(allocator: std.mem.Allocator, result: *types.ParseResult)
 
 fn freeCommand(allocator: std.mem.Allocator, cmd: *types.Command) void {
     switch (cmd.*) {
+        .login => |opts| {
+            if (opts.api) |api| {
+                allocator.free(api.base_url);
+                allocator.free(api.key);
+                if (api.name) |value| allocator.free(value);
+                if (api.model) |value| allocator.free(value);
+                if (api.reasoning_effort) |value| allocator.free(value);
+            }
+        },
         .import_auth => |opts| common.freeImportOptions(allocator, opts.auth_path, opts.alias),
         .export_auth => |opts| {
             if (opts.dest_path) |path| allocator.free(path);
