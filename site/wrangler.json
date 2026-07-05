@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "codexhub-site",
+  "main": "./worker.js",
+  "compatibility_date": "2026-07-05",
+  "routes": [
+    {
+      "pattern": "codexhub.uk/*",
+      "zone_name": "codexhub.uk"
+    },
+    {
+      "pattern": "www.codexhub.uk/*",
+      "zone_name": "codexhub.uk"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SITE_BUCKET",
+      "bucket_name": "codexhub"
+    }
+  ]
+}

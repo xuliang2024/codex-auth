@@ -9,9 +9,13 @@
     "start": "electron .",
     "screenshot": "electron scripts/capture-screenshot.mjs",
     "dist": "electron-builder --mac",
+    "dist:dmg": "electron-builder --mac dmg",
+    "dist:zip": "electron-builder --mac zip",
+    "notarize": "node scripts/notarize.cjs",
     "dist:win": "electron-builder --win"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "electron": "^38.2.0",
     "electron-builder": "^26.0.12"
   },
@@ -21,13 +25,56 @@
     "files": [
       "main.js",
       "preload.cjs",
+      "build/icon.ico",
+      "build/icon.png",
+      "build/icon.svg",
       "renderer/**"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "identity": "yi liu (3DP337K4T3)",
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    },
+    "afterSign": "./scripts/notarize.cjs",
+    "dmg": {
+      "title": "Codex Auth",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   }
 }

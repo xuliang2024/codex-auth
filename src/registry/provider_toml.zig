@@ -20,6 +20,12 @@ pub const config_file_name = "config.toml";
 /// the managed blocks are removed.
 pub const disabled_line_prefix = "#codex-auth:disabled# ";
 
+/// Prefix used to permanently comment out unmanaged top-level
+/// `model_provider` overrides. Such lines reroute every account to a custom
+/// endpoint, which breaks ChatGPT and API-key accounts after a switch, so
+/// they are never restored automatically.
+pub const incompatible_line_prefix = "#codex-auth:incompatible# ";
+
 pub fn configPath(allocator: std.mem.Allocator, codex_home: []const u8) ![]u8 {
     return try std.fs.path.join(allocator, &[_][]const u8{ codex_home, config_file_name });
 }
@@ -80,15 +86,27 @@ const managed_top_level_keys = [_][]const u8{
     "disable_response_storage",
 };
 
-fn isConflictingTopLevelLine(raw_line: []const u8) bool {
+fn topLevelKeyOf(raw_line: []const u8) ?[]const u8 {
     const line = std.mem.trim(u8, raw_line, " \t\r");
-    if (line.len == 0 or line[0] == '#' or line[0] == '[') return false;
-    const eq = std.mem.indexOfScalar(u8, line, '=') orelse return false;
-    const key = std.mem.trim(u8, line[0..eq], " \t");
+    if (line.len == 0 or line[0] == '#' or line[0] == '[') return null;
+    const eq = std.mem.indexOfScalar(u8, line, '=') orelse return null;
+    return std.mem.trim(u8, line[0..eq], " \t");
+}
+
+fn isConflictingTopLevelLine(raw_line: []const u8) bool {
+    const key = topLevelKeyOf(raw_line) orelse return false;
     for (managed_top_level_keys) |managed_key| {
         if (std.mem.eql(u8, key, managed_key)) return true;
     }
     return false;
+}
+
+/// An unmanaged top-level `model_provider` key reroutes every account to a
+/// custom endpoint, which breaks ChatGPT and API-key accounts after a
+/// switch. These lines are quarantined permanently instead of restored.
+fn isForeignModelProviderLine(raw_line: []const u8) bool {
+    const key = topLevelKeyOf(raw_line) orelse return false;
+    return std.mem.eql(u8, key, "model_provider");
 }
 
 /// Re-enables lines previously commented out with `disabled_line_prefix`.
@@ -111,6 +129,8 @@ pub fn restoreDisabledLinesAlloc(allocator: std.mem.Allocator, content: []const 
 
 /// Comments out user-defined top-level scalar lines (before the first
 /// `[table]` header) that would duplicate keys from the managed head block.
+/// Foreign `model_provider` lines are quarantined permanently; other
+/// conflicting keys are disabled restorably.
 fn disableConflictingLinesAlloc(allocator: std.mem.Allocator, content: []const u8) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
@@ -122,10 +142,39 @@ fn disableConflictingLinesAlloc(allocator: std.mem.Allocator, content: []const u
         first = false;
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len > 0 and trimmed[0] == '[') in_top_level = false;
-        if (in_top_level and isConflictingTopLevelLine(line)) {
+        if (in_top_level and isForeignModelProviderLine(line)) {
+            try out.writer.writeAll(incompatible_line_prefix);
+        } else if (in_top_level and isConflictingTopLevelLine(line)) {
             try out.writer.writeAll(disabled_line_prefix);
         }
         try out.writer.writeAll(line);
+    }
+    return try out.toOwnedSlice();
+}
+
+/// Comments out unmanaged top-level `model_provider` lines with the
+/// permanent incompatible prefix. Returns null when nothing changed.
+pub fn quarantineForeignProviderLinesAlloc(allocator: std.mem.Allocator, content: []const u8) !?[]u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+    var changed = false;
+    var it = std.mem.splitScalar(u8, content, '\n');
+    var first = true;
+    var in_top_level = true;
+    while (it.next()) |line| {
+        if (!first) try out.writer.writeAll("\n");
+        first = false;
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (trimmed.len > 0 and trimmed[0] == '[') in_top_level = false;
+        if (in_top_level and isForeignModelProviderLine(line)) {
+            try out.writer.writeAll(incompatible_line_prefix);
+            changed = true;
+        }
+        try out.writer.writeAll(line);
+    }
+    if (!changed) {
+        out.deinit();
+        return null;
     }
     return try out.toOwnedSlice();
 }
@@ -205,29 +254,31 @@ pub fn applyProviderBlocksAlloc(
     return try out.toOwnedSlice();
 }
 
-/// Returns content with managed regions removed and previously disabled user
-/// lines restored, or null when nothing needs to change.
+/// Returns content with managed regions removed, previously disabled user
+/// lines restored, and foreign `model_provider` overrides quarantined, or
+/// null when nothing needs to change.
 pub fn removeProviderBlocksAlloc(allocator: std.mem.Allocator, content: []const u8) !?[]u8 {
     const stripped_owned = try stripManagedRegionsAlloc(allocator, content);
     defer if (stripped_owned) |value| allocator.free(value);
     const had_regions = stripped_owned != null;
     const had_disabled = std.mem.indexOf(u8, content, disabled_line_prefix) != null;
-    if (!had_regions and !had_disabled) return null;
 
-    const restored = try restoreDisabledLinesAlloc(allocator, stripped_owned orelse content);
-    errdefer allocator.free(restored);
+    const restored = if (had_regions or had_disabled)
+        try restoreDisabledLinesAlloc(allocator, stripped_owned orelse content)
+    else
+        try allocator.dupe(u8, content);
+    defer allocator.free(restored);
 
-    const trimmed = std.mem.trim(u8, restored, "\n");
+    const quarantined_owned = try quarantineForeignProviderLinesAlloc(allocator, restored);
+    defer if (quarantined_owned) |value| allocator.free(value);
+    if (!had_regions and !had_disabled and quarantined_owned == null) return null;
+    const result = quarantined_owned orelse restored;
+
+    const trimmed = std.mem.trim(u8, result, "\n");
     if (trimmed.len == 0) {
-        allocator.free(restored);
         return try allocator.dupe(u8, "");
     }
-    if (trimmed.len + 1 == restored.len and std.mem.startsWith(u8, restored, trimmed)) {
-        return restored;
-    }
-    const normalized = try std.fmt.allocPrint(allocator, "{s}\n", .{trimmed});
-    allocator.free(restored);
-    return normalized;
+    return try std.fmt.allocPrint(allocator, "{s}\n", .{trimmed});
 }
 
 fn writeConfigFile(path: []const u8, data: []const u8) !void {
@@ -267,7 +318,8 @@ pub fn applyProviderToConfigFile(
 }
 
 /// Removes the managed provider regions from `config.toml` (used when the
-/// active account is not a provider account). No-op when nothing is managed.
+/// active account is not a provider account) and quarantines unmanaged
+/// `model_provider` overrides. No-op when nothing needs to change.
 pub fn removeProviderFromConfigFile(allocator: std.mem.Allocator, codex_home: []const u8) !void {
     const path = try configPath(allocator, codex_home);
     defer allocator.free(path);
@@ -279,8 +331,30 @@ pub fn removeProviderFromConfigFile(allocator: std.mem.Allocator, codex_home: []
     defer allocator.free(new_content);
     if (std.mem.eql(u8, existing, new_content)) return;
 
+    warnIfQuarantinedForeignProvider(existing, new_content);
     try backupConfigIfExists(allocator, codex_home, path);
     try writeConfigFile(path, new_content);
+}
+
+fn countOccurrences(haystack: []const u8, needle: []const u8) usize {
+    var count: usize = 0;
+    var idx: usize = 0;
+    while (std.mem.indexOfPos(u8, haystack, idx, needle)) |pos| {
+        count += 1;
+        idx = pos + needle.len;
+    }
+    return count;
+}
+
+fn warnIfQuarantinedForeignProvider(existing: []const u8, new_content: []const u8) void {
+    const before = countOccurrences(existing, incompatible_line_prefix);
+    const after = countOccurrences(new_content, incompatible_line_prefix);
+    if (after > before) {
+        std.log.warn(
+            "config.toml contained an unmanaged `model_provider` override that would route this account to a custom endpoint; it was commented out with `{s}`",
+            .{std.mem.trim(u8, incompatible_line_prefix, " ")},
+        );
+    }
 }
 
 /// Reconciles `config.toml` with the account being activated.

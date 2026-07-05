@@ -1,0 +1,2 @@
+fed3f16005362e20d7edab1afd7382b8c979b6141e8e3d1a23644e721c80d72d  codex-auth-desktop-0.1.0-universal.dmg
+7b753bca468f752728a3fad86e5eb0aa12393304db02563b4939eb8a58c948ff  codex-auth-desktop-0.1.0-universal-mac.zip

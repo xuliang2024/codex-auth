@@ -3,12 +3,16 @@ document.body.classList.add(`platform-${window.codexAuth.platform}`);
 const listEl = document.getElementById("account-list");
 const emptyEl = document.getElementById("empty-state");
 const summaryEl = document.getElementById("summary");
+const appVersionEl = document.getElementById("app-version");
 const refreshBtn = document.getElementById("refresh-btn");
 const loginBtn = document.getElementById("login-btn");
+const emptyLoginBtn = document.getElementById("empty-login-btn");
 const loginBanner = document.getElementById("login-banner");
 const loginCancelBtn = document.getElementById("login-cancel-btn");
 const toastEl = document.getElementById("toast");
 const addApiBtn = document.getElementById("add-api-btn");
+const importBtn = document.getElementById("import-btn");
+const exportBtn = document.getElementById("export-btn");
 const apiFormEl = document.getElementById("api-form");
 const apiBaseUrlInput = document.getElementById("api-base-url");
 const apiKeyInput = document.getElementById("api-key");
@@ -83,6 +87,8 @@ let busy = false;
 let toastTimer = null;
 // account_key -> { expired: boolean, error: string | null }
 const accountStatuses = new Map();
+// account_key -> { state: "pending" | "success" | "error", message: string }
+const providerTestStatuses = new Map();
 
 function showToast(message, kind = "info") {
   clearTimeout(toastTimer);
@@ -160,6 +166,7 @@ function render() {
       const usageAgo = fmtAgo(acc.last_usage_at);
       const plan = isProvider ? "api" : (acc.last_usage?.plan_type || acc.plan || "unknown").toLowerCase();
       const status = accountStatuses.get(acc.account_key);
+      const providerTestStatus = providerTestStatuses.get(acc.account_key);
       const isExpired = status?.expired === true;
       return `
       <div class="account-card ${isActive ? "active" : ""} ${isExpired ? "expired" : ""}" data-email="${esc(acc.email)}" data-key="${esc(acc.account_key)}">
@@ -172,7 +179,12 @@ function render() {
           ${isExpired ? `<span class="badge badge-expired" title="${esc(status?.error ?? "")}">${esc(t("badge.expired"))}</span>` : ""}
           ${isActive ? `<span class="badge badge-active">${esc(t("badge.active"))}</span>` : ""}
           <div class="card-actions">
-            ${isProvider ? "" : `<button class="btn btn-ghost refresh-one-btn" title="${esc(t("card.refreshOne.tip"))}">
+            ${isProvider
+              ? `<button class="btn btn-secondary test-api-btn" title="${esc(t("card.testApi.tip"))}">
+                  <span class="login-spinner ${providerTestStatus?.state === "pending" ? "" : "hidden"}"></span>
+                  <span>${esc(t("card.testApi"))}</span>
+                </button>`
+              : `<button class="btn btn-ghost refresh-one-btn" title="${esc(t("card.refreshOne.tip"))}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                 <polyline points="21 3 21 9 15 9" />
@@ -188,7 +200,10 @@ function render() {
         </div>
         ${
           isProvider
-            ? `<div class="no-usage">${esc(t("card.apiProvider", { base: acc.provider?.base_url ? ` · ${acc.provider.base_url}` : "" }))}</div>`
+            ? `<div class="no-usage">${esc(t("card.apiProvider", { base: acc.provider?.base_url ? ` · ${acc.provider.base_url}` : "" }))}</div>
+               ${providerTestStatus
+                 ? `<div class="provider-test-result ${esc(providerTestStatus.state)}">${esc(providerTestStatus.message)}</div>`
+                 : ""}`
             : usage
               ? `<div class="usage-rows">
                   ${usageRow(t("usage.fiveHour"), usage.primary)}
@@ -207,7 +222,10 @@ function setBusy(value) {
   busy = value;
   refreshBtn.disabled = value;
   loginBtn.disabled = value;
+  emptyLoginBtn.disabled = value;
   addApiBtn.disabled = value;
+  importBtn.disabled = value;
+  exportBtn.disabled = value;
   apiFormSaveBtn.disabled = value;
   apiFormTestBtn.disabled = value;
   for (const btn of listEl.querySelectorAll("button")) btn.disabled = value;
@@ -232,7 +250,31 @@ listEl.addEventListener("click", async (event) => {
   if (!card) return;
   const email = card.dataset.email;
 
-  if (event.target.closest(".refresh-one-btn")) {
+  if (event.target.closest(".test-api-btn")) {
+    providerTestStatuses.set(card.dataset.key, {
+      state: "pending",
+      message: t("api.testing"),
+    });
+    render();
+    setBusy(true);
+    let result;
+    try {
+      result = await window.codexAuth.testProviderAccount(card.dataset.key);
+    } catch (error) {
+      result = { ok: false, error: String(error) };
+    }
+    if (result.ok) {
+      const message = t("api.ok", { status: result.status });
+      providerTestStatuses.set(card.dataset.key, { state: "success", message });
+      showToast(message, "success");
+    } else {
+      const message = `✕ ${result.error ?? t("toast.checkFailed")}`;
+      providerTestStatuses.set(card.dataset.key, { state: "error", message });
+      showToast(message, "error");
+    }
+    render();
+    setBusy(false);
+  } else if (event.target.closest(".refresh-one-btn")) {
     const btn = event.target.closest(".refresh-one-btn");
     setBusy(true);
     btn.disabled = true;
@@ -295,7 +337,7 @@ refreshBtn.addEventListener("click", async () => {
   setBusy(false);
 });
 
-loginBtn.addEventListener("click", async () => {
+async function startBrowserLogin() {
   if (busy) return;
   setBusy(true);
   loginBanner.classList.remove("hidden");
@@ -303,7 +345,10 @@ loginBtn.addEventListener("click", async () => {
   loginBanner.classList.add("hidden");
   applyResult(result, t("toast.accountAdded"));
   setBusy(false);
-});
+}
+
+loginBtn.addEventListener("click", startBrowserLogin);
+emptyLoginBtn.addEventListener("click", startBrowserLogin);
 
 loginCancelBtn.addEventListener("click", () => {
   window.codexAuth.loginCancel();
@@ -408,6 +453,57 @@ apiFormSaveBtn.addEventListener("click", async () => {
   setBusy(false);
 });
 
+exportBtn.addEventListener("click", async () => {
+  if (busy) return;
+  setBusy(true);
+  let result;
+  try {
+    result = await window.codexAuth.exportAccounts();
+  } catch (error) {
+    result = { ok: false, error: String(error) };
+  }
+  setBusy(false);
+  if (result.cancelled) return;
+  if (!result.ok) {
+    showToast(result.error ?? t("toast.exportFailed"), "error");
+    return;
+  }
+  const message = result.missing?.length
+    ? t("toast.exportedPartial", { count: result.exported, missing: result.missing.length })
+    : t("toast.exported", { count: result.exported });
+  showToast(message, result.missing?.length ? "info" : "success");
+});
+
+importBtn.addEventListener("click", async () => {
+  if (busy) return;
+  const confirmed = await showConfirm({
+    title: t("confirm.importTitle"),
+    message: t("confirm.importMessage"),
+    confirmLabel: t("confirm.import"),
+  });
+  if (!confirmed) return;
+  setBusy(true);
+  let result;
+  try {
+    result = await window.codexAuth.importAccounts();
+  } catch (error) {
+    result = { ok: false, error: String(error) };
+  }
+  setBusy(false);
+  if (result.cancelled) return;
+  if (!result.ok) {
+    showToast(result.error ?? t("toast.importFailed"), "error");
+    return;
+  }
+  if (result.registry?.ok) {
+    registry = result.registry.data;
+    render();
+  }
+  showToast(t("toast.imported", { added: result.added, updated: result.updated }), "success");
+  // Validate the freshly imported sessions in the background.
+  checkAllAccounts({ silent: true });
+});
+
 langSelect.addEventListener("change", () => {
   I18N.set(langSelect.value);
   render();
@@ -424,6 +520,11 @@ window.codexAuth.onRegistryChanged((payload) => {
 (async function init() {
   langSelect.value = I18N.get();
   I18N.apply();
+  const appVersion = await window.codexAuth.getAppVersion?.();
+  if (appVersion) {
+    appVersionEl.textContent = `v${appVersion}`;
+    appVersionEl.classList.remove("hidden");
+  }
   const payload = await window.codexAuth.getRegistry();
   if (payload.ok) {
     registry = payload.data;

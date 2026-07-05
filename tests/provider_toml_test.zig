@@ -97,6 +97,44 @@ test "applyProviderBlocksAlloc comments out conflicting keys and remove restores
     try std.testing.expectEqualStrings(user_config, removed);
 }
 
+test "removeProviderBlocksAlloc quarantines unmanaged model_provider overrides" {
+    const gpa = std.testing.allocator;
+
+    const user_config = "model_provider = \"OpenAI\"\nmodel = \"gpt-5.5\"\n\n[model_providers.OpenAI]\nname = \"OpenAI\"\nbase_url = \"https://relay.example.com\"\nrequires_openai_auth = true\n";
+    const removed = (try provider_toml.removeProviderBlocksAlloc(gpa, user_config)).?;
+    defer gpa.free(removed);
+
+    // The routing override is commented out permanently; other keys stay.
+    try std.testing.expect(std.mem.indexOf(u8, removed, "#codex-auth:incompatible# model_provider = \"OpenAI\"") != null);
+    try std.testing.expect(std.mem.startsWith(u8, removed, "#codex-auth:incompatible# ") or std.mem.indexOf(u8, removed, "\nmodel_provider = ") == null);
+    try std.testing.expect(std.mem.indexOf(u8, removed, "\nmodel = \"gpt-5.5\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, removed, "[model_providers.OpenAI]") != null);
+
+    // A second pass is a no-op.
+    try std.testing.expect(try provider_toml.removeProviderBlocksAlloc(gpa, removed) == null);
+}
+
+test "applyProviderBlocksAlloc quarantines foreign model_provider and remove keeps it disabled" {
+    const gpa = std.testing.allocator;
+    var provider = try testProvider(gpa);
+    defer registry.freeProviderConfig(gpa, &provider);
+
+    const user_config = "model_provider = \"OpenAI\"\nservice_tier = \"default\"\n";
+    const applied = try provider_toml.applyProviderBlocksAlloc(gpa, user_config, &provider);
+    defer gpa.free(applied);
+
+    try std.testing.expect(std.mem.indexOf(u8, applied, "#codex-auth:incompatible# model_provider = \"OpenAI\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, applied, "model_provider = \"apiz\"") != null);
+
+    const removed = (try provider_toml.removeProviderBlocksAlloc(gpa, applied)).?;
+    defer gpa.free(removed);
+
+    // The foreign override is never restored, unlike restorable disabled keys.
+    try std.testing.expect(std.mem.indexOf(u8, removed, "#codex-auth:incompatible# model_provider = \"OpenAI\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, removed, "model_provider = \"apiz\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, removed, "\nservice_tier = \"default\"") != null or std.mem.startsWith(u8, removed, "service_tier"));
+}
+
 test "registry save/load round-trips provider accounts" {
     const gpa = std.testing.allocator;
     var tmp = fs.tmpDir(.{});
@@ -195,6 +233,37 @@ test "activateAccountByKey applies and removes provider config.toml blocks" {
         defer gpa.free(auth);
         try std.testing.expect(std.mem.indexOf(u8, auth, "sk-test-key") == null);
     }
+}
+
+test "activateAccountByKey quarantines unmanaged model_provider override for chatgpt account" {
+    const gpa = std.testing.allocator;
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+    const home = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home);
+
+    // A hand-written config that reroutes every account to a relay endpoint.
+    try tmp.dir.writeFile(.{ .sub_path = "config.toml", .data = "model_provider = \"OpenAI\"\n\n[model_providers.OpenAI]\nname = \"OpenAI\"\nbase_url = \"https://relay.example.com\"\nrequires_openai_auth = true\n" });
+
+    var reg = fixtures.makeEmptyRegistry();
+    defer reg.deinit(gpa);
+
+    try fixtures.appendAccount(gpa, &reg, "user@example.com", "", .pro);
+    const chatgpt_key = try fixtures.accountKeyForEmailAlloc(gpa, "user@example.com");
+    defer gpa.free(chatgpt_key);
+    const chatgpt_auth = try fixtures.authJsonWithEmailPlan(gpa, "user@example.com", "pro");
+    defer gpa.free(chatgpt_auth);
+    const chatgpt_snapshot_path = try registry.accountAuthPath(gpa, home, chatgpt_key);
+    defer gpa.free(chatgpt_snapshot_path);
+    try registry.ensureAccountsDir(gpa, home);
+    try registry.writeFile(chatgpt_snapshot_path, chatgpt_auth);
+
+    try registry.activateAccountByKey(gpa, home, &reg, chatgpt_key);
+
+    const config = try fixtures.readFileAlloc(gpa, try configPathBuf(&config_path_buf, home));
+    defer gpa.free(config);
+    try std.testing.expect(std.mem.indexOf(u8, config, "#codex-auth:incompatible# model_provider = \"OpenAI\"") != null);
+    try std.testing.expect(std.mem.startsWith(u8, config, "#codex-auth:incompatible# "));
 }
 
 var config_path_buf: [std.fs.max_path_bytes]u8 = undefined;

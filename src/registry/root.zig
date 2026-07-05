@@ -84,7 +84,7 @@ pub const max_backups = common.max_backups;
 
 pub const CleanSummary = clean.CleanSummary;
 const fileExists = clean.fileExists;
-const readFileIfExists = clean.readFileIfExists;
+pub const readFileIfExists = clean.readFileIfExists;
 const filesEqual = clean.filesEqual;
 const fileEqualsBytes = clean.fileEqualsBytes;
 const backupDir = clean.backupDir;

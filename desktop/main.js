@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const APP_ICON_PATH = path.join(__dirname, "build", process.platform === "win32" ? "icon.ico" : "icon.png");
+const DOCK_ICON_PATH = path.join(__dirname, "build", "icon.png");
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const REGISTRY_PATH = path.join(CODEX_HOME, "accounts", "registry.json");
@@ -43,6 +45,12 @@ function resolveCliCommand() {
 const CLI_COMMAND = resolveCliCommand();
 
 let mainWindow = null;
+
+function setDockIcon() {
+  if (process.platform === "darwin" && fs.existsSync(DOCK_ICON_PATH)) {
+    app.dock?.setIcon(DOCK_ICON_PATH);
+  }
+}
 
 function runCli(args, { timeout = 60_000 } = {}) {
   return new Promise((resolve) => {
@@ -95,6 +103,7 @@ function createWindow() {
     minWidth: 620,
     minHeight: 480,
     title: "Codex Auth",
+    icon: APP_ICON_PATH,
     // Frameless-style titlebar is macOS-only; Windows/Linux keep the native frame.
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 16 } }
@@ -110,6 +119,7 @@ function createWindow() {
 }
 
 ipcMain.handle("get-registry", () => readRegistry());
+ipcMain.handle("get-app-version", () => app.getVersion());
 
 ipcMain.handle("switch-account", async (_event, email) => {
   const result = await runCli(["switch", email]);
@@ -437,6 +447,51 @@ ipcMain.handle("test-api-endpoint", (_event, opts) =>
     model: String(opts?.model ?? "").trim(),
   }));
 
+function readStoredProviderTestOptions(accountKey) {
+  const current = readRegistry();
+  if (!current.ok) return current;
+
+  const normalizedKey = String(accountKey ?? "");
+  const account = current.data.accounts?.find((item) => item.account_key === normalizedKey);
+  if (!account || account.auth_mode !== "provider" || !account.provider?.base_url) {
+    return { ok: false, error: "API provider account not found." };
+  }
+
+  const snapshotPath = accountAuthPath(normalizedKey);
+  const activePath = path.join(CODEX_HOME, "auth.json");
+  const authPaths = current.data.active_account_key === normalizedKey
+    ? [snapshotPath, activePath]
+    : [snapshotPath];
+
+  let auth = null;
+  for (const authPath of authPaths) {
+    try {
+      auth = JSON.parse(fs.readFileSync(authPath, "utf8"));
+      break;
+    } catch {
+      // The active auth file is a safe fallback when a snapshot is missing.
+    }
+  }
+
+  const apiKey = String(auth?.OPENAI_API_KEY ?? "").trim();
+  if (!apiKey) {
+    return { ok: false, error: "The stored API key is missing. Add this API provider account again." };
+  }
+
+  return {
+    ok: true,
+    baseUrl: account.provider.base_url,
+    apiKey,
+    model: String(account.provider.model ?? "").trim(),
+  };
+}
+
+ipcMain.handle("test-provider-account", async (_event, accountKey) => {
+  const options = readStoredProviderTestOptions(accountKey);
+  if (!options.ok) return options;
+  return testApiEndpoint(options);
+});
+
 // The renderer orchestrates the pre-add endpoint test (via
 // "test-api-endpoint") and shows its own confirmation UI, so this handler
 // only performs the add itself.
@@ -468,10 +523,155 @@ ipcMain.handle("remove-account", async (_event, email) => {
   return result;
 });
 
+// ---------- account import / export (JSON migration) ----------
+
+const EXPORT_FILE_TYPE = "codex-auth-accounts";
+const EXPORT_FILE_VERSION = 1;
+
+function readAccountAuth(accountKey, activeKey) {
+  // Prefer the live auth.json for the active account; its snapshot under
+  // accounts/ can hold an older, already-rotated refresh token.
+  const paths = accountKey === activeKey
+    ? [path.join(CODEX_HOME, "auth.json"), accountAuthPath(accountKey)]
+    : [accountAuthPath(accountKey)];
+  for (const authPath of paths) {
+    try {
+      return JSON.parse(fs.readFileSync(authPath, "utf8"));
+    } catch {
+      // fall through to the snapshot
+    }
+  }
+  return null;
+}
+
+ipcMain.handle("export-accounts", async () => {
+  const current = readRegistry();
+  if (!current.ok) return { ok: false, error: current.error };
+  const accounts = current.data.accounts ?? [];
+  if (accounts.length === 0) return { ok: false, error: "No accounts to export." };
+
+  const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const picked = await dialog.showSaveDialog(mainWindow, {
+    title: "Export accounts",
+    defaultPath: path.join(app.getPath("downloads"), `codex-auth-accounts-${stamp}.json`),
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (picked.canceled || !picked.filePath) return { ok: false, cancelled: true };
+
+  const auths = {};
+  const missing = [];
+  for (const account of accounts) {
+    const auth = readAccountAuth(account.account_key, current.data.active_account_key);
+    if (auth) auths[account.account_key] = auth;
+    else missing.push(account.email || account.account_key);
+  }
+
+  const payload = {
+    type: EXPORT_FILE_TYPE,
+    version: EXPORT_FILE_VERSION,
+    exported_at: new Date().toISOString(),
+    registry: current.data,
+    auths,
+  };
+  try {
+    fs.writeFileSync(picked.filePath, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
+  } catch (err) {
+    return { ok: false, error: `Failed to write export file: ${err.message}` };
+  }
+  return { ok: true, path: picked.filePath, exported: Object.keys(auths).length, missing };
+});
+
+ipcMain.handle("import-accounts", async () => {
+  const picked = await dialog.showOpenDialog(mainWindow, {
+    title: "Import accounts",
+    properties: ["openFile"],
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (picked.canceled || picked.filePaths.length === 0) return { ok: false, cancelled: true };
+
+  let payload;
+  try {
+    payload = JSON.parse(fs.readFileSync(picked.filePaths[0], "utf8"));
+  } catch (err) {
+    return { ok: false, error: `Cannot read the file: ${err.message}` };
+  }
+  if (payload?.type !== EXPORT_FILE_TYPE || !Array.isArray(payload?.registry?.accounts)) {
+    return { ok: false, error: "This file is not a codex-auth account export." };
+  }
+  if (typeof payload.version === "number" && payload.version > EXPORT_FILE_VERSION) {
+    return { ok: false, error: "This export was created by a newer app version." };
+  }
+
+  const incoming = payload.registry.accounts.filter(
+    (a) => a && typeof a.account_key === "string" && a.account_key.length > 0,
+  );
+  if (incoming.length === 0) return { ok: false, error: "The export file contains no accounts." };
+
+  const accountsDir = path.join(CODEX_HOME, "accounts");
+  try {
+    fs.mkdirSync(accountsDir, { recursive: true });
+  } catch (err) {
+    return { ok: false, error: `Cannot create ${accountsDir}: ${err.message}` };
+  }
+
+  // Merge into the existing registry (imported entries win on conflicts).
+  // When no registry exists yet, start from the imported one but leave no
+  // account active — switching runs through the CLI, which also writes the
+  // live auth.json.
+  const current = readRegistry();
+  const base = current.ok
+    ? current.data
+    : { ...payload.registry, active_account_key: null, previous_active_account_key: null, accounts: [] };
+  const existing = base.accounts ?? [];
+
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  for (const account of incoming) {
+    const auth = payload.auths?.[account.account_key];
+    if (!auth || typeof auth !== "object") {
+      skipped += 1;
+      continue;
+    }
+    try {
+      const serialized = JSON.stringify(auth, null, 2) + "\n";
+      fs.writeFileSync(accountAuthPath(account.account_key), serialized, { mode: 0o600 });
+      // Keep the live auth.json in sync when the imported account is the
+      // one codex is currently using.
+      if (account.account_key === base.active_account_key) {
+        fs.writeFileSync(path.join(CODEX_HOME, "auth.json"), serialized, { mode: 0o600 });
+      }
+    } catch (err) {
+      return { ok: false, error: `Failed to write auth for ${account.email || account.account_key}: ${err.message}` };
+    }
+    const index = existing.findIndex((a) => a.account_key === account.account_key);
+    if (index >= 0) {
+      existing[index] = account;
+      updated += 1;
+    } else {
+      existing.push(account);
+      added += 1;
+    }
+  }
+  if (added === 0 && updated === 0) {
+    return { ok: false, error: "No account in the file had usable auth data." };
+  }
+
+  base.accounts = existing;
+  try {
+    fs.writeFileSync(REGISTRY_PATH, JSON.stringify(base, null, 2) + "\n", { mode: 0o600 });
+  } catch (err) {
+    return { ok: false, error: `Failed to save registry: ${err.message}` };
+  }
+  return { ok: true, added, updated, skipped, registry: readRegistry() };
+});
+
 app.whenReady().then(() => {
+  setDockIcon();
   createWindow();
   watchRegistry();
   app.on("activate", () => {
+    setDockIcon();
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Codex Auth logo">
+  <defs>
+    <linearGradient id="bg" x1="164" y1="100" x2="860" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#182132"/>
+      <stop offset="0.52" stop-color="#0d1017"/>
+      <stop offset="1" stop-color="#121a2a"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="236" y1="244" x2="768" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#77b0ff"/>
+      <stop offset="0.46" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#3ecf8e"/>
+    </linearGradient>
+    <linearGradient id="key" x1="284" y1="424" x2="758" y2="610" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.58" stop-color="#dfeaff"/>
+      <stop offset="1" stop-color="#bdebd9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#030711" flood-opacity="0.45"/>
+    </filter>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(82 82) scale(0.84)">
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <path d="M176 328C292 162 536 114 716 220" fill="none" stroke="#4f8cff" stroke-width="42" stroke-linecap="round" opacity="0.12"/>
+  <path d="M848 698C720 878 448 920 274 760" fill="none" stroke="#3ecf8e" stroke-width="38" stroke-linecap="round" opacity="0.12"/>
+  <circle cx="758" cy="250" r="54" fill="#4f8cff" opacity="0.12" filter="url(#softGlow)"/>
+  <circle cx="238" cy="782" r="44" fill="#3ecf8e" opacity="0.13" filter="url(#softGlow)"/>
+
+  <g filter="url(#shadow)">
+    <path
+      d="M688 282C635 232 563 204 486 210C322 222 200 356 212 522C223 684 356 806 520 806C592 806 660 781 714 738"
+      fill="none"
+      stroke="url(#ring)"
+      stroke-width="104"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <path
+      d="M650 354C615 326 570 310 520 310C407 310 316 401 316 514C316 627 407 718 520 718C568 718 613 701 648 673"
+      fill="none"
+      stroke="#f7fbff"
+      stroke-width="18"
+      stroke-linecap="round"
+      opacity="0.16"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <circle cx="384" cy="514" r="106" fill="url(#key)"/>
+    <circle cx="384" cy="514" r="48" fill="#111827"/>
+    <rect x="456" y="474" width="286" height="80" rx="40" fill="url(#key)"/>
+    <rect x="622" y="536" width="54" height="98" rx="18" fill="#3ecf8e"/>
+    <rect x="708" y="536" width="54" height="78" rx="18" fill="#4f8cff"/>
+    <path d="M454 474h288c22 0 40 18 40 40" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" opacity="0.3"/>
+  </g>
+
+  <path d="M250 530C254 640 343 731 452 744" fill="none" stroke="#3ecf8e" stroke-width="18" stroke-linecap="round" opacity="0.55"/>
+  </g>
+</svg>

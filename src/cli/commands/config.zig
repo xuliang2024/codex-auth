@@ -12,7 +12,20 @@ pub fn parse(allocator: std.mem.Allocator, args: []const [:0]const u8) !types.Pa
     if (std.mem.eql(u8, scope, "live")) {
         return parseLive(allocator, args[1..]);
     }
+    if (std.mem.eql(u8, scope, "fix")) {
+        return parseFix(allocator, args[1..]);
+    }
     return common.usageErrorResult(allocator, .config, "unknown config section `{s}`.", .{scope});
+}
+
+fn parseFix(allocator: std.mem.Allocator, args: []const [:0]const u8) !types.ParseResult {
+    if (args.len == 1 and common.isHelpFlag(std.mem.sliceTo(args[0], 0))) {
+        return .{ .command = .{ .help = .config } };
+    }
+    if (args.len != 0) {
+        return common.usageErrorResult(allocator, .config, "`config fix` does not take arguments.", .{});
+    }
+    return .{ .command = .{ .config = .fix } };
 }
 
 fn parseLive(allocator: std.mem.Allocator, args: []const [:0]const u8) !types.ParseResult {
