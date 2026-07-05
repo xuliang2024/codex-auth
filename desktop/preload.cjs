@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld("codexAuth", {
   platform: process.platform,
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   getRegistry: () => ipcRenderer.invoke("get-registry"),
-  switchAccount: (email) => ipcRenderer.invoke("switch-account", email),
+  switchAccount: (accountKey) => ipcRenderer.invoke("switch-account", accountKey),
   checkAccounts: () => ipcRenderer.invoke("check-accounts"),
   refreshAccountUsage: (accountKey) => ipcRenderer.invoke("refresh-account-usage", accountKey),
   loginStart: () => ipcRenderer.invoke("login-start"),
@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld("codexAuth", {
   testApiEndpoint: (opts) => ipcRenderer.invoke("test-api-endpoint", opts),
   testProviderAccount: (accountKey) => ipcRenderer.invoke("test-provider-account", accountKey),
   loginCancel: () => ipcRenderer.invoke("login-cancel"),
-  removeAccount: (email) => ipcRenderer.invoke("remove-account", email),
+  removeAccount: (accountKey) => ipcRenderer.invoke("remove-account", accountKey),
   exportAccounts: () => ipcRenderer.invoke("export-accounts"),
   importAccounts: () => ipcRenderer.invoke("import-accounts"),
   onRegistryChanged: (callback) => {

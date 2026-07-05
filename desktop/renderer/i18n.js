@@ -34,7 +34,7 @@ const I18N = (() => {
       "apiForm.save": "Add & Switch",
 
       "empty.title": "No accounts found",
-      "empty.hint": "Run <code>codex-auth login</code> in a terminal to add your first account.",
+      "empty.hint": "Click <code>Add Account</code> to sign in with your browser and add your first account.",
 
       "summary.accountOne": "1 account",
       "summary.accountMany": "{count} accounts",
@@ -130,7 +130,7 @@ const I18N = (() => {
       "apiForm.save": "添加并切换",
 
       "empty.title": "未找到账户",
-      "empty.hint": "在终端运行 <code>codex-auth login</code> 添加第一个账户。",
+      "empty.hint": "点击「添加账户」通过浏览器登录，添加第一个账户。",
 
       "summary.accountOne": "1 个账户",
       "summary.accountMany": "{count} 个账户",
@@ -226,7 +226,7 @@ const I18N = (() => {
       "apiForm.save": "追加して切替",
 
       "empty.title": "アカウントが見つかりません",
-      "empty.hint": "ターミナルで <code>codex-auth login</code> を実行して最初のアカウントを追加してください。",
+      "empty.hint": "「アカウント追加」をクリックしてブラウザでサインインし、最初のアカウントを追加してください。",
 
       "summary.accountOne": "アカウント 1 件",
       "summary.accountMany": "アカウント {count} 件",

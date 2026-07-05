@@ -286,7 +286,7 @@ listEl.addEventListener("click", async (event) => {
     setBusy(false);
   } else if (event.target.closest(".switch-btn")) {
     setBusy(true);
-    const result = await window.codexAuth.switchAccount(email);
+    const result = await window.codexAuth.switchAccount(card.dataset.key);
     applyResult(result, t("toast.switched", { email }));
     setBusy(false);
   } else if (event.target.closest(".remove-btn")) {
@@ -298,7 +298,7 @@ listEl.addEventListener("click", async (event) => {
     });
     if (!confirmed) return;
     setBusy(true);
-    const result = await window.codexAuth.removeAccount(email);
+    const result = await window.codexAuth.removeAccount(card.dataset.key);
     applyResult(result, t("toast.removed", { email }));
     setBusy(false);
   }

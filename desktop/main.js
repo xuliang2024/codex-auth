@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
-import { execFile, spawn } from "node:child_process";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as registryOps from "./lib/registry.js";
+import { startBrowserLogin } from "./lib/oauth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ICON_PATH = path.join(__dirname, "build", process.platform === "win32" ? "icon.ico" : "icon.png");
@@ -12,57 +13,12 @@ const DOCK_ICON_PATH = path.join(__dirname, "build", "icon.png");
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const REGISTRY_PATH = path.join(CODEX_HOME, "accounts", "registry.json");
 
-// GUI apps on macOS don't inherit the shell PATH, so common install
-// locations for the codex-auth binary must be appended manually.
-const EXTRA_PATHS = process.platform === "win32"
-  ? []
-  : ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local", "bin")];
-const CLI_ENV = {
-  ...process.env,
-  PATH: [process.env.PATH, ...EXTRA_PATHS].filter(Boolean).join(path.delimiter),
-};
-
-// On Windows an npm global install exposes codex-auth as a .cmd shim, which
-// execFile/spawn refuse to run without a shell. Resolve the real .exe from
-// the platform package next to the shim (or directly on PATH) instead, so
-// user-supplied arguments never pass through cmd.exe quoting.
-function resolveCliCommand() {
-  if (process.platform !== "win32") return "codex-auth";
-  const dirs = (CLI_ENV.PATH || "").split(path.delimiter).filter(Boolean);
-  if (process.env.APPDATA) dirs.push(path.join(process.env.APPDATA, "npm"));
-  const platformPackage = `codex-auth-win32-${process.arch}`;
-  for (const dir of dirs) {
-    const exe = path.join(dir, "codex-auth.exe");
-    if (fs.existsSync(exe)) return exe;
-    if (fs.existsSync(path.join(dir, "codex-auth.cmd"))) {
-      const packagedExe = path.join(dir, "node_modules", "@loongphy", platformPackage, "bin", "codex-auth.exe");
-      if (fs.existsSync(packagedExe)) return packagedExe;
-    }
-  }
-  // Fall back to the bare name; a failed launch surfaces the install hint.
-  return "codex-auth";
-}
-const CLI_COMMAND = resolveCliCommand();
-
 let mainWindow = null;
 
 function setDockIcon() {
   if (process.platform === "darwin" && fs.existsSync(DOCK_ICON_PATH)) {
     app.dock?.setIcon(DOCK_ICON_PATH);
   }
-}
-
-function runCli(args, { timeout = 60_000 } = {}) {
-  return new Promise((resolve) => {
-    execFile(CLI_COMMAND, args, { env: CLI_ENV, timeout }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        stdout: stdout?.toString() ?? "",
-        stderr: stderr?.toString() ?? "",
-        error: error ? (error.code === "ENOENT" ? "codex-auth CLI not found. Install with: npm i -g @loongphy/codex-auth" : error.message) : null,
-      });
-    });
-  });
 }
 
 function readRegistry() {
@@ -121,10 +77,13 @@ function createWindow() {
 ipcMain.handle("get-registry", () => readRegistry());
 ipcMain.handle("get-app-version", () => app.getVersion());
 
-ipcMain.handle("switch-account", async (_event, email) => {
-  const result = await runCli(["switch", email]);
-  if (result.ok) result.registry = readRegistry();
-  return result;
+ipcMain.handle("switch-account", (_event, accountKey) => {
+  try {
+    registryOps.switchAccount(CODEX_HOME, String(accountKey ?? ""));
+    return { ok: true, registry: readRegistry() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 const USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
@@ -334,47 +293,29 @@ ipcMain.handle("check-accounts", async () => {
   };
 });
 
-let loginChild = null;
+let activeLogin = null;
 
+// Native browser OAuth (PKCE) sign-in — no external CLI involved.
 ipcMain.handle("login-start", async () => {
-  if (loginChild) return { ok: false, error: "A login is already in progress." };
-  return new Promise((resolve) => {
-    let stdout = "";
-    let stderr = "";
-    let child;
-    try {
-      // `codex-auth login` runs `codex login`, which opens the browser and
-      // blocks until the OAuth callback completes or the process is killed.
-      child = spawn(CLI_COMMAND, ["login"], { env: CLI_ENV });
-    } catch (err) {
-      resolve({ ok: false, error: String(err) });
-      return;
-    }
-    loginChild = child;
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("error", (err) => {
-      loginChild = null;
-      resolve({
-        ok: false,
-        error: err.code === "ENOENT" ? "codex-auth CLI not found. Install with: npm i -g @loongphy/codex-auth" : err.message,
-      });
-    });
-    child.on("exit", (code, signal) => {
-      loginChild = null;
-      if (signal) {
-        resolve({ ok: false, cancelled: true });
-        return;
-      }
-      resolve({
-        ok: code === 0,
-        stdout,
-        stderr,
-        error: code === 0 ? null : `login exited with code ${code}`,
-        registry: readRegistry(),
-      });
-    });
-  });
+  if (activeLogin) return { ok: false, error: "A login is already in progress." };
+  let flow;
+  try {
+    flow = await startBrowserLogin();
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  activeLogin = flow;
+  shell.openExternal(flow.authUrl);
+  const result = await flow.promise;
+  activeLogin = null;
+  if (result.cancelled) return { ok: false, cancelled: true };
+  if (result.error) return { ok: false, error: result.error };
+  try {
+    registryOps.persistChatgptLogin(CODEX_HOME, result.tokens);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  return { ok: true, registry: readRegistry() };
 });
 
 const TEST_DEFAULT_MODEL = "gpt-5.5";
@@ -495,32 +436,34 @@ ipcMain.handle("test-provider-account", async (_event, accountKey) => {
 // The renderer orchestrates the pre-add endpoint test (via
 // "test-api-endpoint") and shows its own confirmation UI, so this handler
 // only performs the add itself.
-ipcMain.handle("login-api", async (_event, opts) => {
+ipcMain.handle("login-api", (_event, opts) => {
   const baseUrl = String(opts?.baseUrl ?? "").trim();
   const apiKey = String(opts?.apiKey ?? "").trim();
   const name = String(opts?.name ?? "").trim();
   const model = String(opts?.model ?? "").trim();
   if (!baseUrl || !apiKey) return { ok: false, error: "Endpoint URL and API key are required." };
-
-  const args = ["login", "--api", "--base-url", baseUrl, "--key", apiKey];
-  if (name) args.push("--name", name);
-  if (model) args.push("--model", model);
-  const result = await runCli(args);
-  if (result.ok) result.registry = readRegistry();
-  return result;
+  try {
+    registryOps.addProviderAccount(CODEX_HOME, { baseUrl, apiKey, name, model });
+    return { ok: true, registry: readRegistry() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 ipcMain.handle("login-cancel", () => {
-  if (!loginChild) return { ok: false };
-  loginChild.kill("SIGTERM");
+  if (!activeLogin) return { ok: false };
+  activeLogin.cancel();
   return { ok: true };
 });
 
 // Confirmation happens in the renderer's themed modal before this is called.
-ipcMain.handle("remove-account", async (_event, email) => {
-  const result = await runCli(["remove", email]);
-  if (result.ok) result.registry = readRegistry();
-  return result;
+ipcMain.handle("remove-account", (_event, accountKey) => {
+  try {
+    registryOps.removeAccount(CODEX_HOME, String(accountKey ?? ""));
+    return { ok: true, registry: readRegistry() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // ---------- account import / export (JSON migration) ----------
@@ -682,5 +625,5 @@ app.on("window-all-closed", () => {
 
 app.on("quit", () => {
   watcher?.close();
-  loginChild?.kill("SIGTERM");
+  activeLogin?.cancel();
 });

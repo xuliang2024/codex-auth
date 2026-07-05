@@ -1,6 +1,6 @@
 {
   "name": "codex-auth-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Desktop account switcher for codex-auth",
   "private": true,
   "type": "module",
@@ -25,6 +25,7 @@
     "files": [
       "main.js",
       "preload.cjs",
+      "lib/**",
       "build/icon.ico",
       "build/icon.png",
       "build/icon.svg",
@@ -56,6 +57,10 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "linux": {
       "icon": "build/icon.png"
