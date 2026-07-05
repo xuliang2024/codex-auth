@@ -1,8 +1,8 @@
-# Codex Auth [![latest release](https://img.shields.io/github/v/release/Loongphy/codex-auth?sort=semver&label=latest)](https://github.com/Loongphy/codex-auth/releases/latest) [![latest pre-release](https://img.shields.io/github/v/release/Loongphy/codex-auth?include_prereleases&sort=semver&filter=*-*&label=pre-release)](https://github.com/Loongphy/codex-auth/releases)
+# Codex Auth [![latest release](https://img.shields.io/github/v/release/xuliang2024/codex-auth?sort=semver&label=latest)](https://github.com/xuliang2024/codex-auth/releases/latest) [![latest pre-release](https://img.shields.io/github/v/release/xuliang2024/codex-auth?include_prereleases&sort=semver&filter=*-*&label=pre-release)](https://github.com/xuliang2024/codex-auth/releases)
 
 ![command list](https://github.com/user-attachments/assets/6c13a2d6-f9da-47ea-8ec8-0394fc072d40)
 
-`codex-auth` is a command-line tool for switching Codex accounts.
+`codex-auth` is a command-line tool and desktop app for switching Codex accounts.
 
 ## Install
 
@@ -41,7 +41,23 @@ Install the Codex CLI even if you mainly use the VS Code extension or the App, b
 npm install -g @openai/codex
 ```
 
-After that, you can use `codex-auth login`, or `codex-auth login --device-auth` to sign in and add accounts more easily.
+After that, you can use `codex-auth login`, `codex-auth login --device-auth`, or `codex-auth login --api --base-url <url> --key <api-key>` to sign in and add accounts more easily.
+
+## Desktop App
+
+The desktop app provides a visual account switcher with usage bars, one-click switching, and support for both ChatGPT sign-in and custom API providers.
+
+![Codex Auth desktop app](./docs/assets/desktop-app.png)
+
+Install dependencies and start the app from the repository:
+
+```shell
+cd desktop
+npm install
+npm start
+```
+
+The desktop app requires the `codex-auth` CLI on your `PATH` (for example via `npm install -g @loongphy/codex-auth`). It reads the same `~/.codex/accounts/registry.json` as the CLI, so accounts you add in either place show up in both.
 
 ## Commands
 
@@ -68,6 +84,7 @@ Detailed command documentation lives in [docs/commands/README.md](./docs/command
 |---------|-------------|
 | [`codex-auth list [--live] [--active] [--api\|--skip-api]`](./docs/commands/list.md) | List stored accounts and usage state |
 | [`codex-auth login [--device-auth]`](./docs/commands/login.md) | Run `codex login`, then add the current account |
+| [`codex-auth login --api --base-url <url> --key <api-key>`](./docs/commands/login.md) | Add a custom API provider account (endpoint + API key) |
 | [`codex-auth switch [--live] [--api\|--skip-api]`](./docs/commands/switch.md) | Switch the active account interactively |
 | [`codex-auth switch <query>`](./docs/commands/switch.md) | Switch directly by row number or account selector |
 | [`codex-auth remove [--live] [--api\|--skip-api]`](./docs/commands/remove.md) | Remove accounts interactively |
@@ -102,6 +119,7 @@ codex-auth switch
 codex-auth switch 02
 codex-auth remove work
 codex-auth import /path/to/auth.json --alias personal
+codex-auth login --api --base-url https://codex.example.com --key sk-xxxx --name myapi
 codex-auth list --skip-api
 ```
 

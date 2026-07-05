@@ -7,6 +7,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "screenshot": "electron scripts/capture-screenshot.mjs",
     "dist": "electron-builder --mac",
     "dist:win": "electron-builder --win"
   },
