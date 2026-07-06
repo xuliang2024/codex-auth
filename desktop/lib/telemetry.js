@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { proxyFetch } from "./net-fetch.js";
 
 const TELEMETRY_ENDPOINT = process.env.CODEX_AUTH_TELEMETRY_ENDPOINT || "https://codex-auth-telemetry.xuliang2022.workers.dev/v1/telemetry/events";
 const FILE_MODE = 0o600;
@@ -147,7 +148,7 @@ export async function flushTelemetry(codexHome) {
   flushing = true;
   const events = queue.slice(0, 50);
   try {
-    const response = await fetch(TELEMETRY_ENDPOINT, {
+    const response = await proxyFetch(TELEMETRY_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

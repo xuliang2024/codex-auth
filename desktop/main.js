@@ -5,6 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as registryOps from "./lib/registry.js";
 import { startBrowserLogin } from "./lib/oauth.js";
+import { proxyFetch } from "./lib/net-fetch.js";
+import { buildExportPayload } from "./lib/export-accounts.js";
+import { applyImportPayload } from "./lib/import-accounts.js";
+import { fetchShareExport, uploadShare } from "./lib/share.js";
 import {
   buildRegistrySnapshot,
   flushTelemetry,
@@ -171,7 +175,7 @@ async function fetchAnnouncements(opts = {}) {
     url.searchParams.set("version", version);
     url.searchParams.set("platform", platform);
     url.searchParams.set("locale", locale);
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
       headers: {
         Accept: "application/json",
         "User-Agent": `codex-auth-desktop/${version}`,
@@ -252,7 +256,7 @@ async function refreshAuthTokens(authPath, auth) {
 
   let response;
   try {
-    response = await fetch(TOKEN_ENDPOINT, {
+    response = await proxyFetch(TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -289,7 +293,7 @@ async function refreshAuthTokens(authPath, auth) {
 }
 
 function fetchUsage(accessToken, accountId) {
-  return fetch(USAGE_ENDPOINT, {
+  return proxyFetch(USAGE_ENDPOINT, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "ChatGPT-Account-Id": accountId,
@@ -521,7 +525,7 @@ async function testApiEndpoint({ baseUrl, apiKey, model }) {
 
   let response;
   try {
-    response = await fetch(`${normalized}/responses`, {
+    response = await proxyFetch(`${normalized}/responses`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -683,9 +687,6 @@ ipcMain.handle("remove-account", (_event, accountKey) => {
 
 // ---------- account import / export (JSON migration) ----------
 
-const EXPORT_FILE_TYPE = "codex-auth-accounts";
-const EXPORT_FILE_VERSION = 1;
-
 function readAccountAuth(accountKey, activeKey) {
   // Prefer the live auth.json for the active account; its snapshot under
   // accounts/ can hold an older, already-rotated refresh token.
@@ -728,36 +729,107 @@ ipcMain.handle("export-accounts", async () => {
     return result;
   }
 
-  const auths = {};
-  const missing = [];
-  for (const account of accounts) {
-    const auth = readAccountAuth(account.account_key, current.data.active_account_key);
-    if (auth) auths[account.account_key] = auth;
-    else missing.push(account.email || account.account_key);
+  const built = buildExportPayload(current.data, (accountKey) =>
+    readAccountAuth(accountKey, current.data.active_account_key),
+  );
+  if (built.exported === 0) {
+    const result = { ok: false, error: "No accounts had usable auth data to export." };
+    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    return result;
   }
 
-  const payload = {
-    type: EXPORT_FILE_TYPE,
-    version: EXPORT_FILE_VERSION,
-    exported_at: new Date().toISOString(),
-    registry: current.data,
-    auths,
-  };
   try {
-    fs.writeFileSync(picked.filePath, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
+    fs.writeFileSync(picked.filePath, JSON.stringify(built.payload, null, 2) + "\n", { mode: 0o600 });
   } catch (err) {
     const result = { ok: false, error: `Failed to write export file: ${err.message}` };
     trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
     return result;
   }
-  const result = { ok: true, path: picked.filePath, exported: Object.keys(auths).length, missing };
+  const result = { ok: true, path: picked.filePath, exported: built.exported, missing: built.missing };
   trackResult(CODEX_HOME, "export_accounts", result, {
     ...buildRegistrySnapshot(current),
     exported_count: result.exported,
-    missing_count: missing.length,
+    missing_count: built.missing.length,
   });
   return result;
 });
+
+ipcMain.handle("export-accounts-share", async (_event, opts = {}) => {
+  const current = readRegistry();
+  if (!current.ok) {
+    const result = { ok: false, error: current.error };
+    trackResult(CODEX_HOME, "export_accounts_share", result);
+    return result;
+  }
+  const accounts = current.data.accounts ?? [];
+  if (accounts.length === 0) {
+    const result = { ok: false, error: "No accounts to export." };
+    trackResult(CODEX_HOME, "export_accounts_share", result, buildRegistrySnapshot(current));
+    return result;
+  }
+
+  const built = buildExportPayload(current.data, (accountKey) =>
+    readAccountAuth(accountKey, current.data.active_account_key),
+  );
+  if (built.exported === 0) {
+    const result = { ok: false, error: "No accounts had usable auth data to export." };
+    trackResult(CODEX_HOME, "export_accounts_share", result, buildRegistrySnapshot(current));
+    return result;
+  }
+
+  const shareResult = await uploadShare(
+    built.payload,
+    {
+      note: opts.note,
+      ttlDays: opts.ttlDays,
+      exportedByApp: "codex-auth-desktop",
+      exportedByVersion: app.getVersion(),
+    },
+    proxyFetch,
+  );
+  if (!shareResult.ok) {
+    trackResult(CODEX_HOME, "export_accounts_share", shareResult, buildRegistrySnapshot(current));
+    return shareResult;
+  }
+
+  const result = {
+    ok: true,
+    shareUrl: shareResult.shareUrl,
+    importUrl: shareResult.importUrl,
+    expiresAt: shareResult.expiresAt,
+    exported: built.exported,
+    missing: built.missing,
+  };
+  trackResult(CODEX_HOME, "export_accounts_share", result, {
+    ...buildRegistrySnapshot(current),
+    exported_count: built.exported,
+    missing_count: built.missing.length,
+  });
+  return result;
+});
+
+function importPayloadFromDisk(filePath) {
+  try {
+    return { ok: true, payload: JSON.parse(fs.readFileSync(filePath, "utf8")) };
+  } catch (err) {
+    return { ok: false, error: `Cannot read the file: ${err.message}` };
+  }
+}
+
+function finishImportResult(result, source) {
+  if (!result.ok) {
+    trackResult(CODEX_HOME, source, result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+  const wrapped = { ...result, registry: readRegistry() };
+  trackResult(CODEX_HOME, source, wrapped, {
+    ...buildRegistrySnapshot(wrapped.registry),
+    added_count: result.added,
+    updated_count: result.updated,
+    skipped_count: result.skipped,
+  });
+  return wrapped;
+}
 
 ipcMain.handle("import-accounts", async () => {
   const picked = await dialog.showOpenDialog(mainWindow, {
@@ -771,106 +843,41 @@ ipcMain.handle("import-accounts", async () => {
     return result;
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(fs.readFileSync(picked.filePaths[0], "utf8"));
-  } catch (err) {
-    const result = { ok: false, error: `Cannot read the file: ${err.message}` };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
-  }
-  if (payload?.type !== EXPORT_FILE_TYPE || !Array.isArray(payload?.registry?.accounts)) {
-    const result = { ok: false, error: "This file is not a codex-auth account export." };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
-  }
-  if (typeof payload.version === "number" && payload.version > EXPORT_FILE_VERSION) {
-    const result = { ok: false, error: "This export was created by a newer app version." };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
+  const loaded = importPayloadFromDisk(picked.filePaths[0]);
+  if (!loaded.ok) {
+    trackResult(CODEX_HOME, "import_accounts", loaded, buildRegistrySnapshot(readRegistry()));
+    return loaded;
   }
 
-  const incoming = payload.registry.accounts.filter(
-    (a) => a && typeof a.account_key === "string" && a.account_key.length > 0,
+  return finishImportResult(
+    applyImportPayload({
+      codexHome: CODEX_HOME,
+      payload: loaded.payload,
+      readRegistry,
+      registryPath: REGISTRY_PATH,
+      accountAuthPath,
+    }),
+    "import_accounts",
   );
-  if (incoming.length === 0) {
-    const result = { ok: false, error: "The export file contains no accounts." };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
+});
+
+ipcMain.handle("import-accounts-from-url", async (_event, opts = {}) => {
+  const fetched = await fetchShareExport(opts.url, proxyFetch);
+  if (!fetched.ok) {
+    trackResult(CODEX_HOME, "import_accounts_from_url", fetched, buildRegistrySnapshot(readRegistry()));
+    return fetched;
   }
 
-  const accountsDir = path.join(CODEX_HOME, "accounts");
-  try {
-    fs.mkdirSync(accountsDir, { recursive: true });
-  } catch (err) {
-    const result = { ok: false, error: `Cannot create ${accountsDir}: ${err.message}` };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
-  }
-
-  // Merge into the existing registry (imported entries win on conflicts).
-  // When no registry exists yet, start from the imported one but leave no
-  // account active — switching runs through the CLI, which also writes the
-  // live auth.json.
-  const current = readRegistry();
-  const base = current.ok
-    ? current.data
-    : { ...payload.registry, active_account_key: null, previous_active_account_key: null, accounts: [] };
-  const existing = base.accounts ?? [];
-
-  let added = 0;
-  let updated = 0;
-  let skipped = 0;
-  for (const account of incoming) {
-    const auth = payload.auths?.[account.account_key];
-    if (!auth || typeof auth !== "object") {
-      skipped += 1;
-      continue;
-    }
-    try {
-      const serialized = JSON.stringify(auth, null, 2) + "\n";
-      fs.writeFileSync(accountAuthPath(account.account_key), serialized, { mode: 0o600 });
-      // Keep the live auth.json in sync when the imported account is the
-      // one codex is currently using.
-      if (account.account_key === base.active_account_key) {
-        fs.writeFileSync(path.join(CODEX_HOME, "auth.json"), serialized, { mode: 0o600 });
-      }
-    } catch (err) {
-      const result = { ok: false, error: `Failed to write auth for ${account.email || account.account_key}: ${err.message}` };
-      trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-      return result;
-    }
-    const index = existing.findIndex((a) => a.account_key === account.account_key);
-    if (index >= 0) {
-      existing[index] = account;
-      updated += 1;
-    } else {
-      existing.push(account);
-      added += 1;
-    }
-  }
-  if (added === 0 && updated === 0) {
-    const result = { ok: false, error: "No account in the file had usable auth data." };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
-  }
-
-  base.accounts = existing;
-  try {
-    fs.writeFileSync(REGISTRY_PATH, JSON.stringify(base, null, 2) + "\n", { mode: 0o600 });
-  } catch (err) {
-    const result = { ok: false, error: `Failed to save registry: ${err.message}` };
-    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
-    return result;
-  }
-  const result = { ok: true, added, updated, skipped, registry: readRegistry() };
-  trackResult(CODEX_HOME, "import_accounts", result, {
-    ...buildRegistrySnapshot(result.registry),
-    added_count: added,
-    updated_count: updated,
-    skipped_count: skipped,
-  });
-  return result;
+  return finishImportResult(
+    applyImportPayload({
+      codexHome: CODEX_HOME,
+      payload: fetched.payload,
+      readRegistry,
+      registryPath: REGISTRY_PATH,
+      accountAuthPath,
+    }),
+    "import_accounts_from_url",
+  );
 });
 
 app.whenReady().then(() => {

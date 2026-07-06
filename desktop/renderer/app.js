@@ -30,6 +30,23 @@ const modalTitleEl = document.getElementById("modal-title");
 const modalMessageEl = document.getElementById("modal-message");
 const modalCancelBtn = document.getElementById("modal-cancel");
 const modalConfirmBtn = document.getElementById("modal-confirm");
+const choiceOverlay = document.getElementById("choice-overlay");
+const choiceTitleEl = document.getElementById("choice-title");
+const choiceMessageEl = document.getElementById("choice-message");
+const choicePrimaryBtn = document.getElementById("choice-primary");
+const choicePrimaryTitleEl = document.getElementById("choice-primary-title");
+const choicePrimaryDescEl = document.getElementById("choice-primary-desc");
+const choiceSecondaryBtn = document.getElementById("choice-secondary");
+const choiceSecondaryTitleEl = document.getElementById("choice-secondary-title");
+const choiceSecondaryDescEl = document.getElementById("choice-secondary-desc");
+const choiceCancelBtn = document.getElementById("choice-cancel");
+const promptOverlay = document.getElementById("prompt-overlay");
+const promptTitleEl = document.getElementById("prompt-title");
+const promptMessageEl = document.getElementById("prompt-message");
+const promptLabelEl = document.getElementById("prompt-label");
+const promptInputEl = document.getElementById("prompt-input");
+const promptCancelBtn = document.getElementById("prompt-cancel");
+const promptConfirmBtn = document.getElementById("prompt-confirm");
 const langSelect = document.getElementById("lang-select");
 const announcementBar = document.getElementById("announcement-bar");
 const viewListBtn = document.getElementById("view-list-btn");
@@ -67,8 +84,7 @@ function showConfirm({ title, message, confirmLabel, cancelLabel, danger = false
     modalConfirmBtn.textContent = confirmLabel;
     modalConfirmBtn.className = `btn ${danger ? "btn-danger" : "btn-primary"}`;
     modalIconEl.className = `modal-icon ${danger ? "danger" : "warn"}`;
-    modalOverlay.classList.remove("hidden");
-    requestAnimationFrame(() => modalOverlay.classList.add("visible"));
+    openOverlay(modalOverlay);
     modalConfirmBtn.focus();
 
     const close = (result) => {
@@ -103,6 +119,127 @@ function showConfirm({ title, message, confirmLabel, cancelLabel, danger = false
     modalOverlay.addEventListener("mousedown", onBackdrop);
     document.addEventListener("keydown", onKey, true);
   });
+}
+
+function closeOverlay(overlay) {
+  overlay.classList.remove("visible");
+  const hide = () => overlay.classList.add("hidden");
+  overlay.addEventListener(
+    "transitionend",
+    hide,
+    { once: true },
+  );
+  setTimeout(hide, 220);
+}
+
+function openOverlay(overlay) {
+  overlay.classList.remove("hidden");
+  void overlay.offsetWidth;
+  overlay.classList.add("visible");
+}
+
+function setChoiceOption(titleEl, descEl, label, description = "") {
+  titleEl.textContent = label;
+  descEl.textContent = description;
+  descEl.classList.toggle("hidden", !description);
+}
+
+function showChoice({ title, message, primaryLabel, primaryDescription, secondaryLabel, secondaryDescription, cancelLabel }) {
+  cancelLabel = cancelLabel ?? t("btn.cancel");
+  return new Promise((resolve) => {
+    choiceTitleEl.textContent = title;
+    choiceMessageEl.textContent = message;
+    setChoiceOption(choicePrimaryTitleEl, choicePrimaryDescEl, primaryLabel, primaryDescription);
+    setChoiceOption(choiceSecondaryTitleEl, choiceSecondaryDescEl, secondaryLabel, secondaryDescription);
+    choiceCancelBtn.textContent = cancelLabel;
+    openOverlay(choiceOverlay);
+    choicePrimaryBtn.focus();
+
+    const close = (result) => {
+      closeOverlay(choiceOverlay);
+      choicePrimaryBtn.removeEventListener("click", onPrimary);
+      choiceSecondaryBtn.removeEventListener("click", onSecondary);
+      choiceCancelBtn.removeEventListener("click", onCancel);
+      choiceOverlay.removeEventListener("mousedown", onBackdrop);
+      document.removeEventListener("keydown", onKey, true);
+      resolve(result);
+    };
+    const onPrimary = () => close("primary");
+    const onSecondary = () => close("secondary");
+    const onCancel = () => close(null);
+    const onBackdrop = (event) => {
+      if (event.target === choiceOverlay) close(null);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(null);
+      }
+    };
+    choicePrimaryBtn.addEventListener("click", onPrimary);
+    choiceSecondaryBtn.addEventListener("click", onSecondary);
+    choiceCancelBtn.addEventListener("click", onCancel);
+    choiceOverlay.addEventListener("mousedown", onBackdrop);
+    document.addEventListener("keydown", onKey, true);
+  });
+}
+
+function showPrompt({ title, message, label, confirmLabel, cancelLabel, placeholder = "", initialValue = "" }) {
+  confirmLabel = confirmLabel ?? t("confirm.ok");
+  cancelLabel = cancelLabel ?? t("btn.cancel");
+  return new Promise((resolve) => {
+    promptTitleEl.textContent = title;
+    promptMessageEl.textContent = message;
+    promptLabelEl.textContent = label;
+    promptConfirmBtn.textContent = confirmLabel;
+    promptCancelBtn.textContent = cancelLabel;
+    promptInputEl.placeholder = placeholder;
+    promptInputEl.value = initialValue;
+    openOverlay(promptOverlay);
+    promptInputEl.focus();
+    promptInputEl.select();
+
+    const close = (result) => {
+      closeOverlay(promptOverlay);
+      promptCancelBtn.removeEventListener("click", onCancel);
+      promptConfirmBtn.removeEventListener("click", onConfirm);
+      promptOverlay.removeEventListener("mousedown", onBackdrop);
+      document.removeEventListener("keydown", onKey, true);
+      resolve(result);
+    };
+    const onCancel = () => close(null);
+    const onConfirm = () => close(promptInputEl.value.trim());
+    const onBackdrop = (event) => {
+      if (event.target === promptOverlay) close(null);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        close(promptInputEl.value.trim());
+      }
+    };
+    promptCancelBtn.addEventListener("click", onCancel);
+    promptConfirmBtn.addEventListener("click", onConfirm);
+    promptOverlay.addEventListener("mousedown", onBackdrop);
+    document.addEventListener("keydown", onKey, true);
+  });
+}
+
+async function applyImportResult(result) {
+  if (result.cancelled) return;
+  if (!result.ok) {
+    showToast(result.error ?? t("toast.importFailed"), "error");
+    return;
+  }
+  if (result.registry?.ok) {
+    registry = result.registry.data;
+    render();
+  }
+  showToast(t("toast.imported", { added: result.added, updated: result.updated }), "success");
+  checkAllAccounts({ silent: true });
 }
 
 let registry = null;
@@ -557,6 +694,67 @@ apiFormSaveBtn.addEventListener("click", async () => {
 
 exportBtn.addEventListener("click", async () => {
   if (busy) return;
+  const choice = await showChoice({
+    title: t("confirm.exportTitle"),
+    message: t("confirm.exportMessage"),
+    primaryLabel: t("confirm.exportFile"),
+    primaryDescription: t("confirm.exportFileDesc"),
+    secondaryLabel: t("confirm.exportShare"),
+    secondaryDescription: t("confirm.exportShareDesc"),
+  });
+  if (!choice) return;
+
+  if (choice === "secondary") {
+    const confirmed = await showConfirm({
+      title: t("confirm.exportShareWarnTitle"),
+      message: t("confirm.exportShareWarnMessage"),
+      confirmLabel: t("confirm.exportShareContinue"),
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    const note = await showPrompt({
+      title: t("confirm.exportShareNoteTitle"),
+      message: t("confirm.exportShareNoteMessage"),
+      label: t("confirm.exportShareNoteLabel"),
+      confirmLabel: t("confirm.exportShareCreate"),
+      placeholder: t("confirm.exportShareNotePlaceholder"),
+    });
+    if (note === null) return;
+
+    setBusy(true);
+    let result;
+    try {
+      result = await window.codexAuth.exportAccountsShare({ note: note || null, ttlDays: 7 });
+    } catch (error) {
+      result = { ok: false, error: String(error) };
+    }
+    setBusy(false);
+    if (!result.ok) {
+      showToast(result.error ?? t("toast.exportShareFailed"), "error");
+      return;
+    }
+
+    const copied = await showPrompt({
+      title: t("confirm.exportShareDoneTitle"),
+      message: t("confirm.exportShareDoneMessage", { count: result.exported, expires: result.expiresAt }),
+      label: t("confirm.exportShareLinkLabel"),
+      confirmLabel: t("confirm.exportShareCopy"),
+      initialValue: result.shareUrl,
+    });
+    if (copied) {
+      try {
+        await navigator.clipboard.writeText(result.shareUrl);
+        showToast(t("toast.exportShareCopied"), "success");
+      } catch {
+        showToast(t("toast.exportShareCreated"), "success");
+      }
+    } else {
+      showToast(t("toast.exportShareCreated"), "success");
+    }
+    return;
+  }
+
   setBusy(true);
   let result;
   try {
@@ -578,12 +776,38 @@ exportBtn.addEventListener("click", async () => {
 
 importBtn.addEventListener("click", async () => {
   if (busy) return;
-  const confirmed = await showConfirm({
+  const choice = await showChoice({
     title: t("confirm.importTitle"),
     message: t("confirm.importMessage"),
-    confirmLabel: t("confirm.import"),
+    primaryLabel: t("confirm.import"),
+    primaryDescription: t("confirm.importDesc"),
+    secondaryLabel: t("confirm.importLink"),
+    secondaryDescription: t("confirm.importLinkDesc"),
   });
-  if (!confirmed) return;
+  if (!choice) return;
+
+  if (choice === "secondary") {
+    const url = await showPrompt({
+      title: t("confirm.importLinkTitle"),
+      message: t("confirm.importLinkMessage"),
+      label: t("confirm.importLinkLabel"),
+      confirmLabel: t("confirm.importLinkContinue"),
+      placeholder: "https://codexhub.uk/share/...",
+    });
+    if (!url) return;
+
+    setBusy(true);
+    let result;
+    try {
+      result = await window.codexAuth.importAccountsFromUrl({ url });
+    } catch (error) {
+      result = { ok: false, error: String(error) };
+    }
+    setBusy(false);
+    await applyImportResult(result);
+    return;
+  }
+
   setBusy(true);
   let result;
   try {
@@ -592,18 +816,7 @@ importBtn.addEventListener("click", async () => {
     result = { ok: false, error: String(error) };
   }
   setBusy(false);
-  if (result.cancelled) return;
-  if (!result.ok) {
-    showToast(result.error ?? t("toast.importFailed"), "error");
-    return;
-  }
-  if (result.registry?.ok) {
-    registry = result.registry.data;
-    render();
-  }
-  showToast(t("toast.imported", { added: result.added, updated: result.updated }), "success");
-  // Validate the freshly imported sessions in the background.
-  checkAllAccounts({ silent: true });
+  await applyImportResult(result);
 });
 
 langSelect.addEventListener("change", () => {

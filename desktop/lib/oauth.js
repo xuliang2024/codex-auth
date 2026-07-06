@@ -3,12 +3,14 @@
 // callback server on the port OpenAI registered for the Codex client (1455).
 import crypto from "node:crypto";
 import http from "node:http";
+import { proxyFetch } from "./net-fetch.js";
 
 const ISSUER = "https://auth.openai.com";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const PORT = 1455;
 const REDIRECT_URI = `http://localhost:${PORT}/auth/callback`;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
+const OAUTH_SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
 
 const SUCCESS_HTML = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Accounts for Codex</title>
@@ -30,6 +32,41 @@ function b64url(buffer) {
 function htmlResponse(res, status, body) {
   res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
   res.end(body);
+}
+
+function formatOAuthErrorDetail(body) {
+  if (!body) return "";
+  if (typeof body === "string") return body.trim();
+  if (typeof body !== "object") return String(body);
+  if (typeof body.error_description === "string" && body.error_description.trim()) {
+    return body.error_description.trim();
+  }
+  if (typeof body.error === "string" && body.error.trim()) return body.error.trim();
+  if (body.error && typeof body.error === "object") {
+    const nested = body.error.message || body.error.code || body.error.type;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+    try {
+      return JSON.stringify(body.error);
+    } catch {
+      return "[object Object]";
+    }
+  }
+  if (typeof body.message === "string" && body.message.trim()) return body.message.trim();
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return "";
+  }
+}
+
+function tokenExchangeHint(response) {
+  if (response.headers.get("cf-mitigated") === "challenge") {
+    return " Cloudflare blocked the token request. Check VPN/proxy settings for auth.openai.com.";
+  }
+  if (response.status === 403) {
+    return " The app could not reach auth.openai.com through your network proxy. Ensure system proxy settings allow this domain.";
+  }
+  return "";
 }
 
 // Asks a previous login server (ours or the codex CLI's) to shut down so the
@@ -73,27 +110,46 @@ function listenWithRetry(server) {
 }
 
 async function exchangeCodeForTokens(code, codeVerifier) {
-  const response = await fetch(`${ISSUER}/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID,
-      code_verifier: codeVerifier,
-    }).toString(),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response;
+  try {
+    response = await proxyFetch(`${ISSUER}/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: CLIENT_ID,
+        code_verifier: codeVerifier,
+      }).toString(),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const message = err.name === "AbortError"
+      ? "Token exchange timed out after 30 seconds."
+      : `Token exchange transport failed: ${err.message}`;
+    throw new Error(message);
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     let detail = "";
     try {
-      const body = await response.json();
-      detail = body.error_description || body.error || "";
+      detail = formatOAuthErrorDetail(await response.json());
     } catch {
-      // body is only used for diagnostics
+      try {
+        detail = (await response.text()).trim().slice(0, 240);
+      } catch {
+        // body is only used for diagnostics
+      }
     }
-    throw new Error(`Token exchange failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
+    const hint = tokenExchangeHint(response);
+    throw new Error(`Token exchange failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}${hint}`);
   }
   const body = await response.json();
   if (!body.id_token || !body.access_token) {
@@ -117,7 +173,7 @@ export async function startBrowserLogin() {
     response_type: "code",
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    scope: "openid profile email offline_access",
+    scope: OAUTH_SCOPE,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
     id_token_add_organizations: "true",
@@ -130,10 +186,16 @@ export async function startBrowserLogin() {
   const promise = new Promise((resolve) => {
     settle = resolve;
   });
+  let callbackInFlight = false;
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     if (url.pathname === "/auth/callback") {
+      if (callbackInFlight) {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
       if (url.searchParams.get("state") !== state) {
         htmlResponse(res, 400, "<h2>State mismatch</h2><p>Restart the sign-in from Accounts for Codex.</p>");
         finish({ error: "Login callback state mismatch — try again." });
@@ -146,6 +208,7 @@ export async function startBrowserLogin() {
         finish({ error: `Sign-in failed: ${desc}` });
         return;
       }
+      callbackInFlight = true;
       try {
         const tokens = await exchangeCodeForTokens(code, codeVerifier);
         res.writeHead(302, { Location: `http://localhost:${PORT}/success` });
@@ -154,6 +217,8 @@ export async function startBrowserLogin() {
       } catch (err) {
         htmlResponse(res, 500, `<h2>Sign-in failed</h2><p>${err.message}</p>`);
         finish({ error: err.message });
+      } finally {
+        callbackInFlight = false;
       }
     } else if (url.pathname === "/success") {
       htmlResponse(res, 200, SUCCESS_HTML);

@@ -18,5 +18,9 @@
       "binding": "SITE_BUCKET",
       "bucket_name": "codexhub"
     }
-  ]
+  ],
+  "vars": {
+    "SHARE_DEFAULT_TTL_DAYS": "7",
+    "SHARE_MAX_BYTES": "524288"
+  }
 }

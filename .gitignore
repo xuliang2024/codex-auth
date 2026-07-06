@@ -3,12 +3,17 @@ zig-out/
 .zig-cache/
 dist/
 *.tgz
+.DS_Store
 
 # IDE/Editor
 .idea/
 
 # Desktop app dependencies
 desktop/node_modules/
+
+# Site local dependencies and Worker state
+site/node_modules/
+site/.wrangler/
 
 # Local benchmarking workspace
 benchmark/*

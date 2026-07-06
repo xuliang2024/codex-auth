@@ -150,6 +150,75 @@
     </div>
   </div>
 
+  <div id="choice-overlay" class="modal-overlay hidden">
+    <div class="modal choice-modal" role="dialog" aria-modal="true" aria-labelledby="choice-title">
+      <div class="modal-header">
+        <span class="modal-icon warn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </span>
+        <h2 id="choice-title" class="modal-title"></h2>
+      </div>
+      <p id="choice-message" class="modal-message"></p>
+      <div class="choice-actions">
+        <button id="choice-primary" class="choice-option choice-option-primary">
+          <span class="choice-option-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+              <path d="M12 18v-6" />
+              <path d="m9 15 3 3 3-3" />
+            </svg>
+          </span>
+          <span class="choice-option-copy">
+            <span id="choice-primary-title" class="choice-option-title"></span>
+            <span id="choice-primary-desc" class="choice-option-desc"></span>
+          </span>
+        </button>
+        <button id="choice-secondary" class="choice-option">
+          <span class="choice-option-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 4.93" />
+              <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19.07" />
+            </svg>
+          </span>
+          <span class="choice-option-copy">
+            <span id="choice-secondary-title" class="choice-option-title"></span>
+            <span id="choice-secondary-desc" class="choice-option-desc"></span>
+          </span>
+        </button>
+      </div>
+      <div class="modal-actions choice-footer">
+        <button id="choice-cancel" class="btn btn-ghost"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="prompt-overlay" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+      <div class="modal-header">
+        <span class="modal-icon warn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </span>
+        <h2 id="prompt-title" class="modal-title"></h2>
+      </div>
+      <p id="prompt-message" class="modal-message"></p>
+      <label id="prompt-label" class="prompt-label" for="prompt-input"></label>
+      <input id="prompt-input" class="prompt-input" type="text" spellcheck="false" />
+      <div class="modal-actions">
+        <button id="prompt-cancel" class="btn btn-secondary"></button>
+        <button id="prompt-confirm" class="btn btn-primary"></button>
+      </div>
+    </div>
+  </div>
+
   <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
