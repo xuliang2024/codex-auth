@@ -1,33 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Accounts for Codex | Codex Hub</title>
+    <title>Codex 账号管家 | Codex Hub</title>
     <meta
       name="description"
-      content="Accounts for Codex is a focused client app for managing Codex accounts, API providers, usage state, and fast account switching."
+      content="Codex 账号管家是一款专注的桌面客户端，用于管理 Codex 账号、API 提供方、用量状态和快速账号切换。"
     >
-    <meta property="og:title" content="Accounts for Codex">
+    <meta property="og:title" content="Codex 账号管家">
     <meta
       property="og:description"
-      content="A focused desktop client for switching Codex accounts, checking usage, and managing API providers."
+      content="用于切换 Codex 账号、查看用量并管理 API 提供方的桌面客户端。"
     >
     <meta property="og:type" content="website">
     <meta property="og:image" content="/assets/desktop-app.png">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
+    <script src="/downloads.js" defer></script>
   </head>
   <body>
-    <header class="site-header" aria-label="Primary navigation">
-      <a class="brand" href="/" aria-label="Accounts for Codex home">
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="/" aria-label="Codex 账号管家首页">
         <img class="brand-icon" src="/assets/icon.png" width="48" height="48" alt="" aria-hidden="true">
-        <span>Accounts for Codex</span>
+        <span>Codex 账号管家</span>
       </a>
-      <nav class="nav-links" aria-label="Site links">
-        <a href="#downloads">Download</a>
-        <a href="#preview">Preview</a>
-        <a href="#features">Features</a>
+      <nav class="nav-links" aria-label="站点链接">
+        <a href="#downloads">下载</a>
+        <a href="#preview">预览</a>
+        <a href="#features">功能</a>
         <a href="https://github.com/xuliang2024/codex-auth" rel="noreferrer">GitHub</a>
       </nav>
     </header>
@@ -35,115 +36,122 @@
     <main>
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">Desktop client for Codex account switching</p>
-          <h1 id="hero-title">A clearer control center for your Codex accounts.</h1>
+          <p class="eyebrow">Codex 账号切换桌面客户端</p>
+          <h1 id="hero-title">更清晰地管理你的 Codex 账号。</h1>
           <p class="hero-lede">
-            Accounts for Codex gives you a visual account switcher with usage bars,
-            account aliases, API provider setup, refresh controls, and multilingual
-            interface support in one focused client app.
+            Codex 账号管家提供可视化账号切换、用量进度条、账号别名、API
+            提供方配置、刷新控制和多语言界面支持，让日常切换集中在一个轻量客户端里。
           </p>
 
           <div class="hero-actions">
-            <a class="button button-primary" href="/downloads/codex-auth-desktop-0.1.0-universal.dmg">
-              Download macOS App
+            <a
+              class="button button-primary"
+              href="/downloads/codex-auth-desktop-0.1.2-universal.dmg"
+              data-primary-download
+            >
+              下载 macOS 应用
             </a>
             <a class="button button-secondary" href="/assets/desktop-app.png">
-              Open full-size screenshot
+              查看完整截图
             </a>
           </div>
         </div>
 
-        <div class="hero-card" aria-label="App highlights">
-          <img class="hero-icon" src="/assets/icon.png" width="180" height="180" alt="Accounts for Codex app icon">
+        <div class="hero-card" aria-label="应用亮点">
+          <img class="hero-icon" src="/assets/icon.png" width="180" height="180" alt="Codex 账号管家应用图标">
           <div>
-            <span class="card-kicker">Current client</span>
-            <strong>Accounts for Codex 0.1.0</strong>
-            <p>macOS Universal build, packaged as a notarized DMG and ZIP.</p>
+            <span class="card-kicker">当前客户端</span>
+            <strong>Accounts for Codex 0.1.2</strong>
+            <p>已提供 macOS Universal 与 Windows x64/ARM64 安装包。</p>
           </div>
         </div>
       </section>
 
       <section id="preview" class="preview-section" aria-labelledby="preview-title">
         <div class="preview-heading">
-          <p class="eyebrow">App preview</p>
-          <h2 id="preview-title">The screenshot stays large and readable.</h2>
+          <p class="eyebrow">应用预览</p>
+          <h2 id="preview-title">截图保持大尺寸，便于查看。</h2>
           <p>
-            The image below is served from the original screenshot object, with no
-            cropped hero treatment. Use the full-size link if you want to inspect the
-            interface at its native dimensions.
+            下方图片直接使用原始截图资源展示，不做裁切式头图处理。需要检查界面细节时，
+            可以打开完整尺寸截图。
           </p>
         </div>
-        <a class="screenshot-frame" href="/assets/desktop-app.png" aria-label="Open full-size Accounts for Codex screenshot">
-          <img src="/assets/desktop-app.png" width="1720" height="1384" alt="Accounts for Codex desktop client showing accounts and usage bars">
+        <a class="screenshot-frame" href="/assets/desktop-app.png" aria-label="打开 Codex 账号管家完整尺寸截图">
+          <img src="/assets/desktop-app.png" width="1720" height="1384" alt="Codex 账号管家桌面客户端，展示账号列表和用量进度条">
         </a>
       </section>
 
       <section id="downloads" class="section download-section" aria-labelledby="downloads-title">
         <div class="section-heading">
-          <p class="eyebrow">Client downloads</p>
-          <h2 id="downloads-title">Download the packaged desktop app.</h2>
+          <p class="eyebrow">客户端下载</p>
+          <h2 id="downloads-title">下载已打包的桌面应用。</h2>
           <p>
-            These files are hosted on Cloudflare R2 for direct software distribution.
-            Additional client builds can be added here as they are packaged.
+            这些文件托管在 Cloudflare R2，用于直接分发软件。后续打包的新版本也会继续加入这里。
           </p>
         </div>
 
         <div class="download-grid">
-          <a class="download-card primary-card" href="/downloads/codex-auth-desktop-0.1.0-universal.dmg">
-            <span class="card-kicker">Recommended</span>
+          <a class="download-card primary-card" href="/downloads/codex-auth-desktop-0.1.2-universal.dmg">
+            <span class="card-kicker">推荐下载</span>
             <strong>macOS DMG</strong>
-            <span>Accounts for Codex 0.1.0 · Universal · 196 MB</span>
+            <span>Accounts for Codex 0.1.2 · Universal · 196 MB</span>
           </a>
-          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.0-universal-mac.zip">
-            <span class="card-kicker">Portable archive</span>
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-universal-mac.zip">
+            <span class="card-kicker">便携压缩包</span>
             <strong>macOS ZIP</strong>
-            <span>Accounts for Codex 0.1.0 · Universal · 194 MB</span>
+            <span>Accounts for Codex 0.1.2 · Universal · 194 MB</span>
+          </a>
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-win-x64.exe">
+            <span class="card-kicker">Windows 下载</span>
+            <strong>Windows x64</strong>
+            <span>Accounts for Codex 0.1.2 · Installer · 127 MB</span>
+          </a>
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-win-arm64.exe">
+            <span class="card-kicker">Windows ARM</span>
+            <strong>Windows arm64</strong>
+            <span>Accounts for Codex 0.1.2 · Installer · 126 MB</span>
           </a>
           <a class="download-card" href="/downloads/SHA256SUMS.txt">
-            <span class="card-kicker">Verify</span>
-            <strong>SHA-256 checksums</strong>
-            <span>Confirm downloaded files before opening them.</span>
+            <span class="card-kicker">校验文件</span>
+            <strong>SHA-256 校验和</strong>
+            <span>下载后请先核对校验值再打开。</span>
           </a>
         </div>
       </section>
 
       <section id="features" class="section feature-section" aria-labelledby="features-title">
         <div class="section-heading compact-heading">
-          <p class="eyebrow">Client features</p>
-          <h2 id="features-title">Built for people who keep more than one Codex identity.</h2>
+          <p class="eyebrow">客户端功能</p>
+          <h2 id="features-title">为同时使用多个 Codex 身份的人设计。</h2>
         </div>
 
         <div class="feature-grid">
           <article>
             <span class="feature-number">01</span>
-            <h3>Visual account switcher</h3>
+            <h3>可视化账号切换</h3>
             <p>
-              See each account as a readable card with alias, plan, account state,
-              and the active account clearly marked.
+              每个账号都以清晰卡片展示别名、套餐、账号状态，并醒目标出当前正在使用的账号。
             </p>
           </article>
           <article>
             <span class="feature-number">02</span>
-            <h3>Usage at a glance</h3>
+            <h3>用量一眼可见</h3>
             <p>
-              Refresh usage data and scan primary and secondary usage bars without
-              leaving the app window.
+              刷新用量数据后，可以在同一个窗口中查看主用量和次级用量进度条。
             </p>
           </article>
           <article>
             <span class="feature-number">03</span>
-            <h3>Provider setup</h3>
+            <h3>API 提供方配置</h3>
             <p>
-              Add custom API providers from the client, test the endpoint, then keep
-              those providers alongside ChatGPT accounts.
+              直接在客户端添加自定义 API 提供方，测试端点可用后，与 ChatGPT 账号一起管理。
             </p>
           </article>
           <article>
             <span class="feature-number">04</span>
-            <h3>Multilingual interface</h3>
+            <h3>多语言界面</h3>
             <p>
-              Switch the app interface between English, Chinese, and Japanese for a
-              calmer daily workflow.
+              在英文、中文和日文之间切换界面语言，让日常工作流更顺手。
             </p>
           </article>
         </div>
@@ -151,11 +159,11 @@
     </main>
 
     <footer class="site-footer">
-      <p>Codex Hub hosts Accounts for Codex downloads and app information.</p>
+      <p>Codex Hub 提供 Codex 账号管家的下载文件和应用信息。</p>
       <div>
         <a href="https://github.com/xuliang2024/codex-auth" rel="noreferrer">GitHub</a>
-        <a href="https://github.com/xuliang2024/codex-auth/releases" rel="noreferrer">Releases</a>
-        <a href="https://github.com/xuliang2024/codex-auth/issues" rel="noreferrer">Issues</a>
+        <a href="https://github.com/xuliang2024/codex-auth/releases" rel="noreferrer">发布记录</a>
+        <a href="https://github.com/xuliang2024/codex-auth/issues" rel="noreferrer">问题反馈</a>
       </div>
     </footer>
   </body>

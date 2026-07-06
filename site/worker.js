@@ -25,7 +25,7 @@ function isUnsafeKey(key) {
 export default {
   async fetch(request, env) {
     if (request.method !== "GET" && request.method !== "HEAD") {
-      return new Response("Method not allowed", {
+      return new Response("不支持的请求方法", {
         status: 405,
         headers: { allow: "GET, HEAD" },
       });
@@ -43,17 +43,17 @@ export default {
     try {
       key = decodeURIComponent(objectKeyFromPath(url.pathname));
     } catch {
-      return new Response("Bad request", { status: 400 });
+      return new Response("请求无效", { status: 400 });
     }
 
     if (isUnsafeKey(key)) {
-      return new Response("Bad request", { status: 400 });
+      return new Response("请求无效", { status: 400 });
     }
 
     const object = await env.SITE_BUCKET.get(key);
 
     if (!object) {
-      return new Response("Not found", {
+      return new Response("未找到", {
         status: 404,
         headers: { "content-type": "text/plain; charset=utf-8" },
       });

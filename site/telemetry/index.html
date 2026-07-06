@@ -1,58 +1,58 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Accounts for Codex Telemetry | Codex Hub</title>
+    <title>Codex 账号管家遥测 | Codex Hub</title>
     <meta name="robots" content="noindex, nofollow">
     <meta
       name="description"
-      content="Aggregate anonymous Accounts for Codex telemetry."
+      content="Codex 账号管家的匿名遥测汇总。"
     >
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body class="telemetry-page">
-    <header class="site-header" aria-label="Telemetry navigation">
-      <a class="brand" href="/" aria-label="Accounts for Codex home">
+    <header class="site-header" aria-label="遥测导航">
+      <a class="brand" href="/" aria-label="Codex 账号管家首页">
         <img class="brand-icon" src="/assets/icon.png" width="48" height="48" alt="" aria-hidden="true">
-        <span>Accounts for Codex</span>
+        <span>Codex 账号管家</span>
       </a>
-      <div class="telemetry-status" id="telemetry-status">Loading</div>
+      <div class="telemetry-status" id="telemetry-status">加载中</div>
     </header>
 
     <main class="telemetry-shell">
       <section class="telemetry-hero" aria-labelledby="telemetry-title">
         <div>
-          <p class="eyebrow">Anonymous usage telemetry</p>
-          <h1 id="telemetry-title">Accounts for Codex Stats</h1>
+          <p class="eyebrow">匿名使用遥测</p>
+          <h1 id="telemetry-title">Codex 账号管家统计</h1>
           <p class="hero-lede">
-            Aggregate install and feature activity from the desktop client. No email,
-            token, API key, provider URL, account key, or local path is stored here.
+            汇总桌面客户端的安装与功能使用情况。这里不会存储邮箱、令牌、API
+            密钥、提供方 URL、账号密钥或本地路径。
           </p>
         </div>
         <div class="telemetry-meta">
-          <span>Endpoint</span>
+          <span>接口</span>
           <strong>codex-auth-telemetry</strong>
-          <span id="telemetry-updated">Waiting for data</span>
+          <span id="telemetry-updated">等待数据</span>
         </div>
       </section>
 
-      <section class="metric-grid" aria-label="Telemetry totals">
+      <section class="metric-grid" aria-label="遥测汇总">
         <article class="metric-card">
-          <span>Total installs</span>
+          <span>总安装数</span>
           <strong id="metric-installs">--</strong>
         </article>
         <article class="metric-card">
-          <span>Total events</span>
+          <span>总事件数</span>
           <strong id="metric-events">--</strong>
         </article>
         <article class="metric-card">
-          <span>Events in 24h</span>
+          <span>24 小时事件</span>
           <strong id="metric-events-24h">--</strong>
         </article>
         <article class="metric-card">
-          <span>Last event</span>
+          <span>最新事件</span>
           <strong id="metric-last-event">--</strong>
         </article>
       </section>
@@ -60,32 +60,32 @@
       <section class="telemetry-grid">
         <article class="stats-panel account-panel">
           <div class="panel-heading">
-            <p class="eyebrow">Latest account snapshot</p>
-            <h2>Current app shape</h2>
+            <p class="eyebrow">最新账号快照</p>
+            <h2>当前应用概况</h2>
           </div>
           <div id="account-snapshot" class="snapshot-grid"></div>
         </article>
 
         <article class="stats-panel">
           <div class="panel-heading">
-            <p class="eyebrow">Event mix</p>
-            <h2>Events by name</h2>
+            <p class="eyebrow">事件分布</p>
+            <h2>按名称统计</h2>
           </div>
           <div id="events-by-name" class="bar-list"></div>
         </article>
 
         <article class="stats-panel">
           <div class="panel-heading">
-            <p class="eyebrow">Client versions</p>
-            <h2>Installs by version</h2>
+            <p class="eyebrow">客户端版本</p>
+            <h2>按版本安装</h2>
           </div>
           <div id="installs-by-version" class="bar-list"></div>
         </article>
 
         <article class="stats-panel">
           <div class="panel-heading">
-            <p class="eyebrow">Last 14 days</p>
-            <h2>Event trend</h2>
+            <p class="eyebrow">最近 14 天</p>
+            <h2>事件趋势</h2>
           </div>
           <div id="events-by-day" class="day-strip"></div>
         </article>
@@ -94,21 +94,21 @@
       <section class="stats-panel recent-panel" aria-labelledby="recent-events-title">
         <div class="panel-heading table-heading">
           <div>
-            <p class="eyebrow">Recent activity</p>
-            <h2 id="recent-events-title">Latest events</h2>
+            <p class="eyebrow">最近活动</p>
+            <h2 id="recent-events-title">最新事件</h2>
           </div>
-          <button class="button button-secondary telemetry-refresh" id="refresh-telemetry" type="button">Refresh</button>
+          <button class="button button-secondary telemetry-refresh" id="refresh-telemetry" type="button">刷新</button>
         </div>
         <div class="telemetry-table-wrap">
           <table class="telemetry-table">
             <thead>
               <tr>
-                <th>Event</th>
-                <th>Version</th>
-                <th>Platform</th>
-                <th>Locale</th>
-                <th>Received</th>
-                <th>Properties</th>
+                <th>事件</th>
+                <th>版本</th>
+                <th>平台</th>
+                <th>语言</th>
+                <th>接收时间</th>
+                <th>属性</th>
               </tr>
             </thead>
             <tbody id="recent-events"></tbody>

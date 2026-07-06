@@ -9,14 +9,14 @@ function $(id) {
 }
 
 function fmtNumber(value) {
-  return new Intl.NumberFormat("en-US").format(Number(value || 0));
+  return new Intl.NumberFormat("zh-CN").format(Number(value || 0));
 }
 
 function fmtTime(value) {
   if (!value) return "--";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -46,7 +46,7 @@ function renderBars(id, rows, labelKey) {
   const host = $(id);
   const max = Math.max(1, ...rows.map((row) => Number(row.count || 0)));
   if (rows.length === 0) {
-    host.innerHTML = `<div class="empty-note">No data yet</div>`;
+    host.innerHTML = `<div class="empty-note">暂无数据</div>`;
     return;
   }
   host.innerHTML = rows
@@ -70,7 +70,7 @@ function renderDayStrip(rows) {
   const host = $("events-by-day");
   const max = Math.max(1, ...rows.map((row) => Number(row.count || 0)));
   if (rows.length === 0) {
-    host.innerHTML = `<div class="empty-note">No event trend yet</div>`;
+    host.innerHTML = `<div class="empty-note">暂无事件趋势</div>`;
     return;
   }
   host.innerHTML = rows
@@ -78,7 +78,7 @@ function renderDayStrip(rows) {
       const count = Number(row.count || 0);
       const height = Math.max(8, Math.round((count / max) * 100));
       return `
-        <div class="day-column" title="${esc(row.day)} · ${fmtNumber(count)} events">
+        <div class="day-column" title="${esc(row.day)} · ${fmtNumber(count)} 次事件">
           <span style="height:${height}%"></span>
           <small>${esc(row.day.slice(5))}</small>
         </div>`;
@@ -89,7 +89,7 @@ function renderDayStrip(rows) {
 function renderSnapshot(snapshot) {
   const host = $("account-snapshot");
   if (!snapshot) {
-    host.innerHTML = `<div class="empty-note">No app start snapshot yet</div>`;
+    host.innerHTML = `<div class="empty-note">暂无应用启动快照</div>`;
     return;
   }
   const props = snapshot.properties || {};
@@ -97,20 +97,20 @@ function renderSnapshot(snapshot) {
   const plans = props.plan_counts || {};
   host.innerHTML = `
     <div class="snapshot-main">
-      <span>Accounts</span>
+      <span>账号数</span>
       <strong>${fmtNumber(props.account_count || 0)}</strong>
-      <small>${esc(snapshot.app_version || "unknown")} · ${esc(snapshot.platform || "unknown")} · ${esc(snapshot.locale || "unknown")}</small>
+      <small>${esc(snapshot.app_version || "未知")} · ${esc(snapshot.platform || "未知")} · ${esc(snapshot.locale || "未知")}</small>
     </div>
     <div class="snapshot-list">
-      <span>Auth modes</span>
+      <span>认证模式</span>
       <strong>${esc(compactJson(authModes))}</strong>
     </div>
     <div class="snapshot-list">
-      <span>Plans</span>
+      <span>套餐</span>
       <strong>${esc(compactJson(plans))}</strong>
     </div>
     <div class="snapshot-list">
-      <span>Received</span>
+      <span>接收时间</span>
       <strong>${fmtTime(snapshot.received_at)}</strong>
     </div>`;
 }
@@ -118,16 +118,16 @@ function renderSnapshot(snapshot) {
 function renderRecent(events) {
   const body = $("recent-events");
   if (!events.length) {
-    body.innerHTML = `<tr><td colspan="6">No recent events</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6">暂无最近事件</td></tr>`;
     return;
   }
   body.innerHTML = events
     .map((event) => `
       <tr>
         <td>${esc(event.event_name)}</td>
-        <td>${esc(event.app_version || "unknown")}</td>
-        <td>${esc(event.platform || "unknown")}</td>
-        <td>${esc(event.locale || "unknown")}</td>
+        <td>${esc(event.app_version || "未知")}</td>
+        <td>${esc(event.platform || "未知")}</td>
+        <td>${esc(event.locale || "未知")}</td>
         <td>${fmtTime(event.received_at)}</td>
         <td>${esc(compactJson(event.properties))}</td>
       </tr>`)
@@ -140,8 +140,8 @@ function render(data) {
   renderMetric("metric-events", fmtNumber(data.totals?.events));
   renderMetric("metric-events-24h", fmtNumber(data.totals?.events_24h));
   renderMetric("metric-last-event", fmtTime(data.totals?.last_event_at));
-  $("telemetry-updated").textContent = `Updated ${fmtTime(data.generated_at)}`;
-  $("telemetry-status").textContent = "Live";
+  $("telemetry-updated").textContent = `更新于 ${fmtTime(data.generated_at)}`;
+  $("telemetry-status").textContent = "在线";
 
   renderSnapshot(data.latest_account_snapshot);
   renderBars("events-by-name", data.events_by_name || [], "event_name");
@@ -151,16 +151,16 @@ function render(data) {
 }
 
 async function loadTelemetry() {
-  $("telemetry-status").textContent = "Loading";
+  $("telemetry-status").textContent = "加载中";
   try {
     const response = await fetch(SUMMARY_ENDPOINT, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (!data.ok) throw new Error(data.error || "Unknown response");
+    if (!data.ok) throw new Error(data.error || "未知响应");
     render(data);
   } catch (error) {
-    $("telemetry-status").textContent = "Offline";
-    $("telemetry-updated").textContent = `Could not load data: ${error.message}`;
+    $("telemetry-status").textContent = "离线";
+    $("telemetry-updated").textContent = `无法加载数据：${error.message}`;
   }
 }
 
