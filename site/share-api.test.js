@@ -150,13 +150,15 @@ test("GET /share/{id} renders HTML summary without tokens", async () => {
   assert.match(html, /a\*\*\*@example\.com/);
   assert.match(html, /For Bob/);
   assert.doesNotMatch(html, /token-a/);
-  assert.match(html, /3 步完成/);
+  assert.match(html, /4 步完成/);
   assert.match(html, /账号配置导入/);
   assert.match(html, /share-summary-status/);
   assert.match(html, /可导入配置/);
   assert.match(html, /下载并打开客户端/);
   assert.match(html, /复制导入链接|copy-import-link/);
   assert.match(html, /粘贴链接并导入/);
+  assert.match(html, /重启 Codex 生效/);
+  assert.match(html, /导入完成或切换账号后/);
   assert.match(html, /import-share-link\.png/);
   assert.match(html, /客户端链接导入示意图/);
 });

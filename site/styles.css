@@ -1301,7 +1301,7 @@ h3 {
 }
 
 .share-actions-primary .share-step-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 0;
 }
@@ -1310,7 +1310,7 @@ h3 {
   align-content: start;
   grid-template-columns: 1fr;
   gap: 15px;
-  min-height: 224px;
+  min-height: 216px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);

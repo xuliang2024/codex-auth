@@ -4,7 +4,7 @@ const MAX_BODY_BYTES = 512 * 1024;
 const DEFAULT_TTL_DAYS = 7;
 const MAX_TTL_DAYS = 30;
 const MAX_NOTE_LENGTH = 200;
-const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260706-action-summary";
+const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260706-four-steps";
 const SHARE_IMPORT_IMAGE_SRC = "/assets/import-share-link.png?v=20260706";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -232,7 +232,7 @@ function renderSharePage(meta, origin) {
             <div>
               <p class="eyebrow">配置分享</p>
               <h1 id="share-actions-title">
-                <span>3 步完成</span>
+                <span>4 步完成</span>
                 <span>账号配置导入</span>
               </h1>
             </div>
@@ -265,6 +265,13 @@ function renderSharePage(meta, origin) {
                 <strong>粘贴链接并导入</strong>
                 <p>选择「导入分享链接」，粘贴后点击「导入」。</p>
                 <a class="share-import-reference" href="${SHARE_IMPORT_IMAGE_SRC}" aria-label="查看客户端链接导入示意图">查看导入位置示意图</a>
+              </div>
+            </li>
+            <li class="share-step-item">
+              <span class="share-step-number" aria-hidden="true">4</span>
+              <div class="share-step-content">
+                <strong>重启 Codex 生效</strong>
+                <p>导入完成或切换账号后，请重启 Codex，新的账号配置才会生效。</p>
               </div>
             </li>
           </ol>
