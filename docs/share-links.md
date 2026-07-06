@@ -43,21 +43,11 @@ shares/{uuid}/export.json
 `meta.json` is used by the HTML page and contains masked emails only.
 `export.json` contains the full desktop export payload.
 
-## Upload Authentication
+## Upload Access
 
-If `SHARE_UPLOAD_TOKEN` is configured on the Worker, the desktop app must send:
+`POST /v1/shares` is intentionally available to the desktop app without a private upload token. The endpoint validates the export payload, body size, and TTL before storing a share.
 
-```text
-x-share-token: <token>
-```
-
-Set the desktop build/runtime variable:
-
-```text
-CODEX_AUTH_SHARE_UPLOAD_TOKEN
-```
-
-Optional API base override:
+Optional desktop API base override:
 
 ```text
 CODEX_AUTH_SHARE_API_BASE=https://codexhub.uk
@@ -69,7 +59,6 @@ From `site/`:
 
 ```sh
 npx wrangler deploy
-npx wrangler secret put SHARE_UPLOAD_TOKEN
 ```
 
 ## Privacy

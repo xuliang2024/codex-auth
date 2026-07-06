@@ -413,6 +413,13 @@ function render() {
                 <polyline points="21 3 21 9 15 9" />
               </svg>
             </button>`}
+            <button class="btn btn-ghost export-one-btn" title="${esc(t("card.export.tip"))}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12" />
+                <path d="m7 8 5-5 5 5" />
+                <path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+              </svg>
+            </button>
             ${isActive ? "" : `<button class="btn btn-primary switch-btn">${esc(t("btn.switch"))}</button>`}
             <button class="btn btn-ghost remove-btn" title="${esc(t("card.remove.tip"))}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -507,6 +514,8 @@ listEl.addEventListener("click", async (event) => {
     applyResult(result, t("toast.usageRefreshedFor", { email }));
     render();
     setBusy(false);
+  } else if (event.target.closest(".export-one-btn")) {
+    await runExportFlow({ accountKey: card.dataset.key, email });
   } else if (event.target.closest(".switch-btn")) {
     setBusy(true);
     const result = await window.codexAuth.switchAccount(card.dataset.key);
@@ -692,22 +701,31 @@ apiFormSaveBtn.addEventListener("click", async () => {
   setBusy(false);
 });
 
-exportBtn.addEventListener("click", async () => {
+function exportToastMessage(result, email) {
+  if (result.scope === "single" && email) return t("toast.exportedFor", { email });
+  return result.missing?.length
+    ? t("toast.exportedPartial", { count: result.exported, missing: result.missing.length })
+    : t("toast.exported", { count: result.exported });
+}
+
+async function runExportFlow({ accountKey = null, email = null } = {}) {
   if (busy) return;
+  const isSingle = Boolean(accountKey);
+  const label = email || accountKey || "";
   const choice = await showChoice({
-    title: t("confirm.exportTitle"),
-    message: t("confirm.exportMessage"),
+    title: isSingle ? t("confirm.exportTitleOne", { email: label }) : t("confirm.exportTitle"),
+    message: isSingle ? t("confirm.exportMessageOne") : t("confirm.exportMessage"),
     primaryLabel: t("confirm.exportFile"),
-    primaryDescription: t("confirm.exportFileDesc"),
+    primaryDescription: isSingle ? t("confirm.exportFileDescOne") : t("confirm.exportFileDesc"),
     secondaryLabel: t("confirm.exportShare"),
-    secondaryDescription: t("confirm.exportShareDesc"),
+    secondaryDescription: isSingle ? t("confirm.exportShareDescOne") : t("confirm.exportShareDesc"),
   });
   if (!choice) return;
 
   if (choice === "secondary") {
     const confirmed = await showConfirm({
       title: t("confirm.exportShareWarnTitle"),
-      message: t("confirm.exportShareWarnMessage"),
+      message: isSingle ? t("confirm.exportShareWarnMessageOne", { email: label }) : t("confirm.exportShareWarnMessage"),
       confirmLabel: t("confirm.exportShareContinue"),
       danger: true,
     });
@@ -715,7 +733,7 @@ exportBtn.addEventListener("click", async () => {
 
     const note = await showPrompt({
       title: t("confirm.exportShareNoteTitle"),
-      message: t("confirm.exportShareNoteMessage"),
+      message: isSingle ? t("confirm.exportShareNoteMessageOne") : t("confirm.exportShareNoteMessage"),
       label: t("confirm.exportShareNoteLabel"),
       confirmLabel: t("confirm.exportShareCreate"),
       placeholder: t("confirm.exportShareNotePlaceholder"),
@@ -725,7 +743,11 @@ exportBtn.addEventListener("click", async () => {
     setBusy(true);
     let result;
     try {
-      result = await window.codexAuth.exportAccountsShare({ note: note || null, ttlDays: 7 });
+      result = await window.codexAuth.exportAccountsShare({
+        note: note || null,
+        ttlDays: 7,
+        ...(isSingle ? { accountKey } : {}),
+      });
     } catch (error) {
       result = { ok: false, error: String(error) };
     }
@@ -737,7 +759,9 @@ exportBtn.addEventListener("click", async () => {
 
     const copied = await showPrompt({
       title: t("confirm.exportShareDoneTitle"),
-      message: t("confirm.exportShareDoneMessage", { count: result.exported, expires: result.expiresAt }),
+      message: isSingle
+        ? t("confirm.exportShareDoneMessageOne", { email: label, expires: result.expiresAt })
+        : t("confirm.exportShareDoneMessage", { count: result.exported, expires: result.expiresAt }),
       label: t("confirm.exportShareLinkLabel"),
       confirmLabel: t("confirm.exportShareCopy"),
       initialValue: result.shareUrl,
@@ -758,7 +782,7 @@ exportBtn.addEventListener("click", async () => {
   setBusy(true);
   let result;
   try {
-    result = await window.codexAuth.exportAccounts();
+    result = await window.codexAuth.exportAccounts(isSingle ? { accountKey } : undefined);
   } catch (error) {
     result = { ok: false, error: String(error) };
   }
@@ -768,10 +792,12 @@ exportBtn.addEventListener("click", async () => {
     showToast(result.error ?? t("toast.exportFailed"), "error");
     return;
   }
-  const message = result.missing?.length
-    ? t("toast.exportedPartial", { count: result.exported, missing: result.missing.length })
-    : t("toast.exported", { count: result.exported });
+  const message = exportToastMessage(result, label);
   showToast(message, result.missing?.length ? "info" : "success");
+}
+
+exportBtn.addEventListener("click", () => {
+  runExportFlow();
 });
 
 importBtn.addEventListener("click", async () => {

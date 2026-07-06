@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld("codexAuth", {
   testProviderAccount: (accountKey) => ipcRenderer.invoke("test-provider-account", accountKey),
   loginCancel: () => ipcRenderer.invoke("login-cancel"),
   removeAccount: (accountKey) => ipcRenderer.invoke("remove-account", accountKey),
-  exportAccounts: () => ipcRenderer.invoke("export-accounts"),
+  exportAccounts: (opts) => ipcRenderer.invoke("export-accounts", opts),
   exportAccountsShare: (opts) => ipcRenderer.invoke("export-accounts-share", opts),
   importAccounts: () => ipcRenderer.invoke("import-accounts"),
   importAccountsFromUrl: (opts) => ipcRenderer.invoke("import-accounts-from-url", opts),

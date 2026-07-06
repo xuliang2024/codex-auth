@@ -168,6 +168,7 @@ body.platform-linux .titlebar {
 }
 .btn-ghost:hover:not(:disabled) { color: var(--red); background: rgba(240, 97, 109, 0.1); }
 .refresh-one-btn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.export-one-btn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
 
 .btn svg { flex-shrink: 0; }
 

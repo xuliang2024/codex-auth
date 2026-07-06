@@ -65,3 +65,35 @@ test("uploadShare forwards server errors", async () => {
   assert.equal(result.ok, false);
   assert.match(result.error, /no accounts/);
 });
+
+test("uploadShare does not send legacy upload token headers", async () => {
+  const { uploadShare } = await import("./share.js");
+  const previous = process.env.CODEX_AUTH_SHARE_UPLOAD_TOKEN;
+  process.env.CODEX_AUTH_SHARE_UPLOAD_TOKEN = "secret";
+  try {
+    let capturedHeaders = null;
+    const result = await uploadShare(
+      { type: "codex-auth-accounts", version: 1, registry: { accounts: [] }, auths: {} },
+      {},
+      async (_url, init) => {
+        capturedHeaders = init.headers;
+        return {
+          ok: true,
+          async json() {
+            return {
+              id: "550e8400-e29b-41d4-a716-446655440000",
+              share_url: "https://codexhub.uk/share/550e8400-e29b-41d4-a716-446655440000",
+              import_url: "https://codexhub.uk/v1/shares/550e8400-e29b-41d4-a716-446655440000/export",
+              expires_at: "2026-07-13T00:00:00.000Z",
+            };
+          },
+        };
+      },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(capturedHeaders["x-share-token"], undefined);
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_AUTH_SHARE_UPLOAD_TOKEN;
+    else process.env.CODEX_AUTH_SHARE_UPLOAD_TOKEN = previous;
+  }
+});

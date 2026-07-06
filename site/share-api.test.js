@@ -178,7 +178,7 @@ test("expired share export returns 410", async () => {
   assert.equal(response.status, 410);
 });
 
-test("upload requires token when configured", async () => {
+test("POST /v1/shares stays available when legacy upload token is configured", async () => {
   const env = mockEnv(new MockBucket(), { SHARE_UPLOAD_TOKEN: "secret" });
   const response = await handleShareRequest(
     new Request("https://codexhub.uk/v1/shares", {
@@ -188,5 +188,7 @@ test("upload requires token when configured", async () => {
     }),
     env,
   );
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.ok, true);
 });

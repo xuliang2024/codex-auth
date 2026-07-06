@@ -144,12 +144,6 @@ async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
   }
 }
 
-function isUploadAuthorized(request, env) {
-  const token = env.SHARE_UPLOAD_TOKEN;
-  if (!token) return true;
-  return request.headers.get("x-share-token") === token;
-}
-
 function publicOrigin(request) {
   const url = new URL(request.url);
   url.pathname = "";
@@ -357,9 +351,6 @@ async function readShareMeta(bucket, id) {
 }
 
 async function handleCreateShare(request, env) {
-  if (!isUploadAuthorized(request, env)) {
-    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
-  }
   if (!env.SITE_BUCKET) {
     return jsonResponse({ ok: false, error: "share storage is not configured" }, 500);
   }

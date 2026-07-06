@@ -36,8 +36,6 @@ export function sharePageUrl(id, base = SHARE_API_BASE) {
 
 export async function uploadShare(exportPayload, opts = {}, fetchFn = fetch) {
   const headers = { "content-type": "application/json" };
-  const uploadToken = process.env.CODEX_AUTH_SHARE_UPLOAD_TOKEN;
-  if (uploadToken) headers["x-share-token"] = uploadToken;
 
   const response = await fetchFn(`${SHARE_API_BASE.replace(/\/+$/, "")}/v1/shares`, {
     method: "POST",

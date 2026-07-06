@@ -703,38 +703,90 @@ function readAccountAuth(accountKey, activeKey) {
   return null;
 }
 
-ipcMain.handle("export-accounts", async () => {
+function normalizeExportAccountKey(opts) {
+  if (typeof opts === "string") return opts.trim();
+  return String(opts?.accountKey ?? "").trim();
+}
+
+function resolveExportTarget(current, opts) {
+  const accounts = current.data.accounts ?? [];
+  if (accounts.length === 0) return { ok: false, error: "No accounts to export." };
+
+  const accountKey = normalizeExportAccountKey(opts);
+  if (!accountKey) {
+    return { ok: true, accountKey: null, account: null, scope: "all" };
+  }
+
+  const account = accounts.find((item) => item?.account_key === accountKey);
+  if (!account) return { ok: false, error: "Account not found." };
+  return { ok: true, accountKey, account, scope: "single" };
+}
+
+function exportTargetLabel(target) {
+  return target.account?.email || target.account?.alias || target.accountKey || "accounts";
+}
+
+function exportFileSlug(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "account";
+}
+
+function buildTargetExport(current, target) {
+  return buildExportPayload(
+    current.data,
+    (accountKey) => readAccountAuth(accountKey, current.data.active_account_key),
+    { accountKey: target.accountKey },
+  );
+}
+
+ipcMain.handle("export-accounts", async (_event, opts = {}) => {
   const current = readRegistry();
   if (!current.ok) {
     const result = { ok: false, error: current.error };
     trackResult(CODEX_HOME, "export_accounts", result);
     return result;
   }
-  const accounts = current.data.accounts ?? [];
-  if (accounts.length === 0) {
-    const result = { ok: false, error: "No accounts to export." };
+
+  const target = resolveExportTarget(current, opts);
+  if (!target.ok) {
+    const result = { ok: false, error: target.error };
     trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
     return result;
   }
 
   const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const basename = target.scope === "single"
+    ? `codex-auth-account-${exportFileSlug(exportTargetLabel(target))}-${stamp}.json`
+    : `codex-auth-accounts-${stamp}.json`;
   const picked = await dialog.showSaveDialog(mainWindow, {
-    title: "Export accounts",
-    defaultPath: path.join(app.getPath("downloads"), `codex-auth-accounts-${stamp}.json`),
+    title: target.scope === "single" ? "Export account" : "Export accounts",
+    defaultPath: path.join(app.getPath("downloads"), basename),
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
   if (picked.canceled || !picked.filePath) {
     const result = { ok: false, cancelled: true };
-    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    trackResult(CODEX_HOME, "export_accounts", result, {
+      ...buildRegistrySnapshot(current),
+      export_scope: target.scope,
+    });
     return result;
   }
 
-  const built = buildExportPayload(current.data, (accountKey) =>
-    readAccountAuth(accountKey, current.data.active_account_key),
-  );
+  const built = buildTargetExport(current, target);
   if (built.exported === 0) {
-    const result = { ok: false, error: "No accounts had usable auth data to export." };
-    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    const result = {
+      ok: false,
+      error: target.scope === "single"
+        ? "No usable auth data found for this account."
+        : "No accounts had usable auth data to export.",
+    };
+    trackResult(CODEX_HOME, "export_accounts", result, {
+      ...buildRegistrySnapshot(current),
+      export_scope: target.scope,
+    });
     return result;
   }
 
@@ -742,12 +794,16 @@ ipcMain.handle("export-accounts", async () => {
     fs.writeFileSync(picked.filePath, JSON.stringify(built.payload, null, 2) + "\n", { mode: 0o600 });
   } catch (err) {
     const result = { ok: false, error: `Failed to write export file: ${err.message}` };
-    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    trackResult(CODEX_HOME, "export_accounts", result, {
+      ...buildRegistrySnapshot(current),
+      export_scope: target.scope,
+    });
     return result;
   }
-  const result = { ok: true, path: picked.filePath, exported: built.exported, missing: built.missing };
+  const result = { ok: true, path: picked.filePath, exported: built.exported, missing: built.missing, scope: target.scope };
   trackResult(CODEX_HOME, "export_accounts", result, {
     ...buildRegistrySnapshot(current),
+    export_scope: target.scope,
     exported_count: result.exported,
     missing_count: built.missing.length,
   });
@@ -761,19 +817,26 @@ ipcMain.handle("export-accounts-share", async (_event, opts = {}) => {
     trackResult(CODEX_HOME, "export_accounts_share", result);
     return result;
   }
-  const accounts = current.data.accounts ?? [];
-  if (accounts.length === 0) {
-    const result = { ok: false, error: "No accounts to export." };
+
+  const target = resolveExportTarget(current, opts);
+  if (!target.ok) {
+    const result = { ok: false, error: target.error };
     trackResult(CODEX_HOME, "export_accounts_share", result, buildRegistrySnapshot(current));
     return result;
   }
 
-  const built = buildExportPayload(current.data, (accountKey) =>
-    readAccountAuth(accountKey, current.data.active_account_key),
-  );
+  const built = buildTargetExport(current, target);
   if (built.exported === 0) {
-    const result = { ok: false, error: "No accounts had usable auth data to export." };
-    trackResult(CODEX_HOME, "export_accounts_share", result, buildRegistrySnapshot(current));
+    const result = {
+      ok: false,
+      error: target.scope === "single"
+        ? "No usable auth data found for this account."
+        : "No accounts had usable auth data to export.",
+    };
+    trackResult(CODEX_HOME, "export_accounts_share", result, {
+      ...buildRegistrySnapshot(current),
+      export_scope: target.scope,
+    });
     return result;
   }
 
@@ -788,7 +851,10 @@ ipcMain.handle("export-accounts-share", async (_event, opts = {}) => {
     proxyFetch,
   );
   if (!shareResult.ok) {
-    trackResult(CODEX_HOME, "export_accounts_share", shareResult, buildRegistrySnapshot(current));
+    trackResult(CODEX_HOME, "export_accounts_share", shareResult, {
+      ...buildRegistrySnapshot(current),
+      export_scope: target.scope,
+    });
     return shareResult;
   }
 
@@ -799,9 +865,11 @@ ipcMain.handle("export-accounts-share", async (_event, opts = {}) => {
     expiresAt: shareResult.expiresAt,
     exported: built.exported,
     missing: built.missing,
+    scope: target.scope,
   };
   trackResult(CODEX_HOME, "export_accounts_share", result, {
     ...buildRegistrySnapshot(current),
+    export_scope: target.scope,
     exported_count: built.exported,
     missing_count: built.missing.length,
   });
