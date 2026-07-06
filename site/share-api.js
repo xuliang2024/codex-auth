@@ -4,7 +4,7 @@ const MAX_BODY_BYTES = 512 * 1024;
 const DEFAULT_TTL_DAYS = 7;
 const MAX_TTL_DAYS = 30;
 const MAX_NOTE_LENGTH = 200;
-const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260706-link-import";
+const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260706-action-summary";
 const SHARE_IMPORT_IMAGE_SRC = "/assets/import-share-link.png?v=20260706";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -226,95 +226,99 @@ function renderSharePage(meta, origin) {
     </header>
 
     <main class="share-page share-shell">
-      <section class="share-hero" aria-labelledby="share-title">
-        <div class="share-hero-copy">
-          <p class="eyebrow">配置分享</p>
-          <h1 id="share-title">
-            <span>账号配置</span>
-            <span>已准备好导入</span>
-          </h1>
-          <p class="hero-lede">
-            <span>该分享包含 ${accountCount} 个账号。</span>
-            <span>完整凭证只会通过客户端导入接口获取。</span>
-          </p>
+      <section class="share-hero share-action-hero" aria-labelledby="share-actions-title">
+        <section class="share-panel share-actions-panel share-actions-primary" aria-labelledby="share-actions-title">
+          <div class="share-actions-heading">
+            <div>
+              <p class="eyebrow">配置分享</p>
+              <h1 id="share-actions-title">
+                <span>3 步完成</span>
+                <span>账号配置导入</span>
+              </h1>
+            </div>
+            <p class="hero-lede">
+              <span>该分享包含 ${accountCount} 个账号。</span>
+              <span>完整凭证只会通过客户端导入接口获取。</span>
+            </p>
+          </div>
           ${noteBlock}
-        </div>
-
-        <aside class="share-import-card" aria-label="分享状态">
-          <div class="share-card-top">
-            <img class="share-card-icon" src="/favicon.svg" width="44" height="44" alt="" aria-hidden="true">
-            <div>
-              <span class="card-kicker">Share ready</span>
-              <strong>可导入配置</strong>
-            </div>
-          </div>
-          <div class="share-count">
-            <span>${accountCount}</span>
-            <p>个账号摘要</p>
-          </div>
-          <div class="share-date-stack">
-            <div>
-              <span>创建时间</span>
-              <strong>${createdAt}</strong>
-            </div>
-            <div>
-              <span>失效时间</span>
-              <strong>${expiresAt}</strong>
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      <div class="share-main-grid">
-        <section class="share-panel share-summary-panel" aria-labelledby="share-summary-title">
-          <div class="share-panel-heading">
-            <div>
-              <p class="eyebrow">账号摘要</p>
-              <h2 id="share-summary-title">即将导入的账号</h2>
-            </div>
-            <span class="share-panel-badge">${accountCount} 个账号</span>
-          </div>
-          <p class="share-panel-copy">邮箱已打码显示。完整凭证仅可通过客户端获取，网页不会展示 token 或会话数据。</p>
-          <div class="share-table-wrap">
-            <table class="share-table">
-              <thead>
-                <tr>
-                  <th>邮箱</th>
-                  <th>别名</th>
-                  <th>套餐</th>
-                  <th>类型</th>
-                </tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>
-          <p class="share-meta">创建于 ${createdAt} · 过期于 ${expiresAt}</p>
-        </section>
-
-        <aside class="share-panel share-actions-panel" aria-labelledby="share-actions-title">
-          <p class="eyebrow">下一步</p>
-          <h2 id="share-actions-title">在客户端中导入</h2>
-          <div class="hero-actions">
-            <a class="button button-primary" href="/#downloads" data-primary-download>下载桌面客户端</a>
-            <button type="button" class="button button-secondary" id="copy-import-link">复制导入链接</button>
-          </div>
-          <div class="share-import-guide" aria-label="客户端导入步骤">
-            <ol>
-              <li>复制本页导入链接。</li>
-              <li>打开客户端，选择「导入分享链接」，粘贴后点击「导入」。</li>
-            </ol>
-            <a class="share-import-shot" href="${SHARE_IMPORT_IMAGE_SRC}" aria-label="查看客户端链接导入示意图">
-              <img src="${SHARE_IMPORT_IMAGE_SRC}" width="1280" height="772" alt="Codex 账号管家客户端中从分享链接导入的弹窗截图" loading="lazy">
-            </a>
-          </div>
+          <ol class="share-step-list" aria-label="客户端导入步骤">
+            <li class="share-step-item">
+              <span class="share-step-number" aria-hidden="true">1</span>
+              <div class="share-step-content">
+                <strong>下载并打开客户端</strong>
+                <p>安装桌面端，导入会在客户端内完成。</p>
+                <a class="button button-primary" href="/#downloads" data-primary-download>下载桌面客户端</a>
+              </div>
+            </li>
+            <li class="share-step-item">
+              <span class="share-step-number" aria-hidden="true">2</span>
+              <div class="share-step-content">
+                <strong>复制本页导入链接</strong>
+                <p>客户端会用此链接拉取完整凭证。</p>
+                <button type="button" class="button button-secondary" id="copy-import-link">复制导入链接</button>
+              </div>
+            </li>
+            <li class="share-step-item">
+              <span class="share-step-number" aria-hidden="true">3</span>
+              <div class="share-step-content">
+                <strong>粘贴链接并导入</strong>
+                <p>选择「导入分享链接」，粘贴后点击「导入」。</p>
+                <a class="share-import-reference" href="${SHARE_IMPORT_IMAGE_SRC}" aria-label="查看客户端链接导入示意图">查看导入位置示意图</a>
+              </div>
+            </li>
+          </ol>
           <div class="share-warning">
             <strong>请谨慎保管此链接</strong>
             <p>
               它包含可导入的账号凭证，到期后会自动失效。导入后建议在 OpenAI 账户设置中检查活跃会话。
             </p>
           </div>
-        </aside>
-      </div>
+        </section>
+      </section>
+
+      <section class="share-panel share-summary-panel" aria-labelledby="share-summary-title">
+        <div class="share-panel-heading">
+          <div>
+            <p class="eyebrow">账号摘要</p>
+            <h2 id="share-summary-title">即将导入的账号</h2>
+          </div>
+          <span class="share-panel-badge">${accountCount} 个账号</span>
+        </div>
+        <div class="share-summary-status" aria-label="分享状态">
+          <div>
+            <span>状态</span>
+            <strong>可导入配置</strong>
+          </div>
+          <div>
+            <span>账号摘要</span>
+            <strong>${accountCount} 个</strong>
+          </div>
+          <div>
+            <span>创建时间</span>
+            <strong>${createdAt}</strong>
+          </div>
+          <div>
+            <span>失效时间</span>
+            <strong>${expiresAt}</strong>
+          </div>
+        </div>
+        <p class="share-panel-copy">邮箱已打码显示。完整凭证仅可通过客户端获取，网页不会展示 token 或会话数据。</p>
+        <div class="share-table-wrap">
+          <table class="share-table">
+            <thead>
+              <tr>
+                <th>邮箱</th>
+                <th>别名</th>
+                <th>套餐</th>
+                <th>类型</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <p class="share-meta">创建于 ${createdAt} · 过期于 ${expiresAt}</p>
+      </section>
     </main>
 
     <footer class="site-footer">

@@ -6,12 +6,12 @@
     <title>Codex 账号管家 | Codex Hub</title>
     <meta
       name="description"
-      content="Codex 账号管家是一款专注的桌面客户端，用于管理 Codex 账号、API 提供方、用量状态和快速账号切换。"
+      content="Codex 账号管家是一款专注的桌面客户端，用于管理 Codex 账号、API 提供方、用量状态、账号分享和快速账号切换。"
     >
     <meta property="og:title" content="Codex 账号管家">
     <meta
       property="og:description"
-      content="用于切换 Codex 账号、查看用量并管理 API 提供方的桌面客户端。"
+      content="用于切换 Codex 账号、查看用量、创建账号分享链接并管理 API 提供方的桌面客户端。"
     >
     <meta property="og:type" content="website">
     <meta property="og:image" content="/assets/desktop-app.png">
@@ -27,6 +27,7 @@
       </a>
       <nav class="nav-links" aria-label="站点链接">
         <a href="#downloads">下载</a>
+        <a href="#sharing">分享</a>
         <a href="#preview">预览</a>
         <a href="#features">功能</a>
         <a href="https://github.com/xuliang2024/codex-auth" rel="noreferrer">GitHub</a>
@@ -37,16 +38,16 @@
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="eyebrow">Codex 账号切换桌面客户端</p>
-          <h1 id="hero-title">更清晰地管理你的 Codex 账号。</h1>
+          <h1 id="hero-title">把多个 Codex 账号管到一个清爽窗口里。</h1>
           <p class="hero-lede">
-            Codex 账号管家提供可视化账号切换、用量进度条、账号别名、API
-            提供方配置、刷新控制和多语言界面支持，让日常切换集中在一个轻量客户端里。
+            Codex 账号管家把账号切换、用量刷新、API 提供方配置、导入导出和临时分享链接
+            放在同一个轻量桌面客户端里，适合同时维护多个 Codex 身份的日常工作流。
           </p>
 
           <div class="hero-actions">
             <a
               class="button button-primary"
-              href="/downloads/codex-auth-desktop-0.1.2-universal.dmg"
+              href="/downloads/codex-auth-desktop-0.1.5-universal.dmg"
               data-primary-download
             >
               下载 macOS 应用
@@ -55,14 +56,89 @@
               查看完整截图
             </a>
           </div>
+
+          <div class="hero-highlights" aria-label="核心能力">
+            <div>
+              <span>切换</span>
+              <strong>一键设为当前账号</strong>
+            </div>
+            <div>
+              <span>用量</span>
+              <strong>进度条直接可见</strong>
+            </div>
+            <div>
+              <span>分享</span>
+              <strong>7 天临时导入链接</strong>
+            </div>
+          </div>
         </div>
 
-        <div class="hero-card" aria-label="应用亮点">
-          <img class="hero-icon" src="/assets/icon.png" width="180" height="180" alt="Codex 账号管家应用图标">
-          <div>
-            <span class="card-kicker">当前客户端</span>
-            <strong>Accounts for Codex 0.1.2</strong>
-            <p>已提供 macOS Universal 与 Windows x64/ARM64 安装包。</p>
+        <div class="hero-visual" aria-label="账号管理和分享流程示意">
+          <div class="visual-titlebar">
+            <img class="hero-icon" src="/assets/icon.png" width="72" height="72" alt="Codex 账号管家应用图标">
+            <div>
+              <span class="card-kicker">Accounts for Codex 0.1.5</span>
+              <strong>5 个账号集中管理</strong>
+            </div>
+            <em>当前</em>
+          </div>
+          <div class="visual-account-list">
+            <div class="visual-account-row is-active">
+              <span>work@example.com</span>
+              <strong>Plus · 71%</strong>
+            </div>
+            <div class="visual-account-row">
+              <span>team@example.com</span>
+              <strong>Team · 42%</strong>
+            </div>
+            <div class="visual-account-row">
+              <span>api-provider</span>
+              <strong>Custom API</strong>
+            </div>
+          </div>
+          <div class="visual-share">
+            <span>分享链接</span>
+            <strong>可导入 3 个账号 · 到期自动失效</strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="sharing" class="sharing-section" aria-labelledby="sharing-title">
+        <div class="sharing-inner">
+          <div class="sharing-copy">
+            <p class="eyebrow">账号分享</p>
+            <h2 id="sharing-title">把账号配置发给可信的人，接收方直接导入。</h2>
+            <p>
+              在桌面端选择导出时，可以创建一个临时分享链接。分享页只展示打码邮箱、账号摘要和说明，
+              完整凭证只会通过客户端导入接口获取；默认 7 天后失效。
+            </p>
+            <div class="sharing-actions">
+              <a class="button button-primary" href="#downloads">下载客户端</a>
+              <a class="button button-secondary" href="/assets/import-share-link.png">查看导入示意</a>
+            </div>
+          </div>
+
+          <div class="sharing-visual">
+            <a class="sharing-preview" href="/assets/import-share-link.png" aria-label="查看客户端分享链接导入示意图">
+              <img src="/assets/import-share-link.png" width="2560" height="1544" alt="Codex 账号管家客户端中从分享链接导入的弹窗截图" loading="lazy">
+            </a>
+            <div class="sharing-flow" aria-label="账号分享流程">
+              <div>
+                <span>01</span>
+                <strong>创建分享链接</strong>
+                <p>选择要导出的账号，可附加一段说明。</p>
+              </div>
+              <div>
+                <span>02</span>
+                <strong>发送给可信对象</strong>
+                <p>分享页仅显示摘要，链接到期后自动失效。</p>
+              </div>
+              <div>
+                <span>03</span>
+                <strong>客户端导入</strong>
+                <p>接收方粘贴链接，确认后合并到本地账号库。</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -70,10 +146,9 @@
       <section id="preview" class="preview-section" aria-labelledby="preview-title">
         <div class="preview-heading">
           <p class="eyebrow">应用预览</p>
-          <h2 id="preview-title">截图保持大尺寸，便于查看。</h2>
+          <h2 id="preview-title">账号、用量和操作入口放在同一屏。</h2>
           <p>
-            下方图片直接使用原始截图资源展示，不做裁切式头图处理。需要检查界面细节时，
-            可以打开完整尺寸截图。
+            下方图片直接使用原始截图资源展示，不做裁切式头图处理。需要检查界面细节时，可以打开完整尺寸截图。
           </p>
         </div>
         <a class="screenshot-frame" href="/assets/desktop-app.png" aria-label="打开 Codex 账号管家完整尺寸截图">
@@ -84,32 +159,32 @@
       <section id="downloads" class="section download-section" aria-labelledby="downloads-title">
         <div class="section-heading">
           <p class="eyebrow">客户端下载</p>
-          <h2 id="downloads-title">下载已打包的桌面应用。</h2>
+          <h2 id="downloads-title">下载桌面应用</h2>
           <p>
             这些文件托管在 Cloudflare R2，用于直接分发软件。后续打包的新版本也会继续加入这里。
           </p>
         </div>
 
         <div class="download-grid">
-          <a class="download-card primary-card" href="/downloads/codex-auth-desktop-0.1.2-universal.dmg">
+          <a class="download-card primary-card" href="/downloads/codex-auth-desktop-0.1.5-universal.dmg">
             <span class="card-kicker">推荐下载</span>
             <strong>macOS DMG</strong>
-            <span>Accounts for Codex 0.1.2 · Universal · 196 MB</span>
+            <span>Accounts for Codex 0.1.5 · Universal · 196 MB</span>
           </a>
-          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-universal-mac.zip">
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.5-universal-mac.zip">
             <span class="card-kicker">便携压缩包</span>
             <strong>macOS ZIP</strong>
-            <span>Accounts for Codex 0.1.2 · Universal · 194 MB</span>
+            <span>Accounts for Codex 0.1.5 · Universal · 194 MB</span>
           </a>
-          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-win-x64.exe">
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.5-win-x64.exe">
             <span class="card-kicker">Windows 下载</span>
             <strong>Windows x64</strong>
-            <span>Accounts for Codex 0.1.2 · Installer · 127 MB</span>
+            <span>Accounts for Codex 0.1.5 · Installer · 127 MB</span>
           </a>
-          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.2-win-arm64.exe">
+          <a class="download-card" href="/downloads/codex-auth-desktop-0.1.5-win-arm64.exe">
             <span class="card-kicker">Windows ARM</span>
             <strong>Windows arm64</strong>
-            <span>Accounts for Codex 0.1.2 · Installer · 126 MB</span>
+            <span>Accounts for Codex 0.1.5 · Installer · 126 MB</span>
           </a>
           <a class="download-card" href="/downloads/SHA256SUMS.txt">
             <span class="card-kicker">校验文件</span>
@@ -122,7 +197,7 @@
       <section id="features" class="section feature-section" aria-labelledby="features-title">
         <div class="section-heading compact-heading">
           <p class="eyebrow">客户端功能</p>
-          <h2 id="features-title">为同时使用多个 Codex 身份的人设计。</h2>
+          <h2 id="features-title">为同时使用多个 Codex 身份的人设计</h2>
         </div>
 
         <div class="feature-grid">
@@ -142,13 +217,20 @@
           </article>
           <article>
             <span class="feature-number">03</span>
+            <h3>账号分享链接</h3>
+            <p>
+              导出时创建临时分享链接，接收方可以在客户端粘贴导入，分享页只展示打码摘要。
+            </p>
+          </article>
+          <article>
+            <span class="feature-number">04</span>
             <h3>API 提供方配置</h3>
             <p>
               直接在客户端添加自定义 API 提供方，测试端点可用后，与 ChatGPT 账号一起管理。
             </p>
           </article>
           <article>
-            <span class="feature-number">04</span>
+            <span class="feature-number">05</span>
             <h3>多语言界面</h3>
             <p>
               在英文、中文和日文之间切换界面语言，让日常工作流更顺手。

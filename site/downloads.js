@@ -1,17 +1,17 @@
 (() => {
   const DOWNLOAD_OPTIONS = {
     macos: {
-      href: "/downloads/codex-auth-desktop-0.1.2-universal.dmg",
+      href: "/downloads/codex-auth-desktop-0.1.5-universal.dmg",
       label: "下载 macOS 应用",
       title: "下载 macOS Universal DMG",
     },
     windowsX64: {
-      href: "/downloads/codex-auth-desktop-0.1.2-win-x64.exe",
+      href: "/downloads/codex-auth-desktop-0.1.5-win-x64.exe",
       label: "下载 Windows 应用",
       title: "下载 Windows x64 安装包",
     },
     windowsArm64: {
-      href: "/downloads/codex-auth-desktop-0.1.2-win-arm64.exe",
+      href: "/downloads/codex-auth-desktop-0.1.5-win-arm64.exe",
       label: "下载 Windows ARM 应用",
       title: "下载 Windows ARM64 安装包",
     },
