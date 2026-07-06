@@ -11,7 +11,7 @@ const REDIRECT_URI = `http://localhost:${PORT}/auth/callback`;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 
 const SUCCESS_HTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Codex Auth</title>
+<html><head><meta charset="utf-8"><title>Accounts for Codex</title>
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; background: #0d1017; color: #e6e9ef;
          display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
@@ -20,7 +20,7 @@ const SUCCESS_HTML = `<!DOCTYPE html>
   p { color: #9aa3b2; }
 </style></head>
 <body><div class="card"><div class="check">&#10003;</div>
-<h2>Sign-in complete</h2><p>You can close this tab and return to Codex Auth.</p>
+<h2>Sign-in complete</h2><p>You can close this tab and return to Accounts for Codex.</p>
 </div></body></html>`;
 
 function b64url(buffer) {
@@ -135,7 +135,7 @@ export async function startBrowserLogin() {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     if (url.pathname === "/auth/callback") {
       if (url.searchParams.get("state") !== state) {
-        htmlResponse(res, 400, "<h2>State mismatch</h2><p>Restart the sign-in from Codex Auth.</p>");
+        htmlResponse(res, 400, "<h2>State mismatch</h2><p>Restart the sign-in from Accounts for Codex.</p>");
         finish({ error: "Login callback state mismatch — try again." });
         return;
       }

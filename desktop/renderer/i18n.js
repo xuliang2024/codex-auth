@@ -6,7 +6,7 @@ const I18N = (() => {
 
   const translations = {
     en: {
-      "app.title": "Codex Accounts",
+      "app.title": "Accounts for Codex",
       "btn.addAccount": "Add Account",
       "btn.addAccount.tip": "Sign in via browser and add the account",
       "btn.addApi": "Add API",
@@ -20,6 +20,8 @@ const I18N = (() => {
       "btn.cancel": "Cancel",
       "btn.switch": "Switch",
       "lang.tip": "Language",
+      "view.list.tip": "List view",
+      "view.grid.tip": "Grid view",
 
       "login.waiting": "Waiting for browser sign-in… complete the login in your browser.",
 
@@ -100,9 +102,10 @@ const I18N = (() => {
       "toast.exportFailed": "Export failed",
       "toast.imported": "Import complete — {added} added, {updated} updated",
       "toast.importFailed": "Import failed",
+      "toast.openLinkFailed": "Could not open this link",
     },
     zh: {
-      "app.title": "Codex 账户",
+      "app.title": "Codex 账户管家",
       "btn.addAccount": "添加账户",
       "btn.addAccount.tip": "通过浏览器登录并添加账户",
       "btn.addApi": "添加 API",
@@ -116,6 +119,8 @@ const I18N = (() => {
       "btn.cancel": "取消",
       "btn.switch": "切换",
       "lang.tip": "语言",
+      "view.list.tip": "列表视图",
+      "view.grid.tip": "方块视图",
 
       "login.waiting": "等待浏览器登录……请在浏览器中完成登录。",
 
@@ -196,9 +201,10 @@ const I18N = (() => {
       "toast.exportFailed": "导出失败",
       "toast.imported": "导入完成——新增 {added} 个，更新 {updated} 个",
       "toast.importFailed": "导入失败",
+      "toast.openLinkFailed": "无法打开该链接",
     },
     ja: {
-      "app.title": "Codex アカウント",
+      "app.title": "Codex アカウント管理",
       "btn.addAccount": "アカウント追加",
       "btn.addAccount.tip": "ブラウザでサインインしてアカウントを追加",
       "btn.addApi": "API 追加",
@@ -212,6 +218,8 @@ const I18N = (() => {
       "btn.cancel": "キャンセル",
       "btn.switch": "切替",
       "lang.tip": "言語",
+      "view.list.tip": "リスト表示",
+      "view.grid.tip": "グリッド表示",
 
       "login.waiting": "ブラウザでのサインインを待っています…ブラウザでログインを完了してください。",
 
@@ -292,6 +300,7 @@ const I18N = (() => {
       "toast.exportFailed": "エクスポートに失敗しました",
       "toast.imported": "インポート完了——追加 {added} 件、更新 {updated} 件",
       "toast.importFailed": "インポートに失敗しました",
+      "toast.openLinkFailed": "このリンクを開けませんでした",
     },
   };
 

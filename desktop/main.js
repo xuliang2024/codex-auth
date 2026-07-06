@@ -1,10 +1,18 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as registryOps from "./lib/registry.js";
 import { startBrowserLogin } from "./lib/oauth.js";
+import {
+  buildRegistrySnapshot,
+  flushTelemetry,
+  initTelemetry,
+  shutdownTelemetry,
+  trackResult,
+  trackTelemetry,
+} from "./lib/telemetry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ICON_PATH = path.join(__dirname, "build", process.platform === "win32" ? "icon.ico" : "icon.png");
@@ -12,8 +20,14 @@ const DOCK_ICON_PATH = path.join(__dirname, "build", "icon.png");
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const REGISTRY_PATH = path.join(CODEX_HOME, "accounts", "registry.json");
+const ANNOUNCEMENTS_ENDPOINT = process.env.CODEX_AUTH_ANNOUNCEMENTS_ENDPOINT || "https://codex-auth-telemetry.xuliang2022.workers.dev/v1/announcements";
+const ANNOUNCEMENTS_FALLBACK_TTL_SECONDS = 300;
+const MAX_ANNOUNCEMENT_TITLE_LENGTH = 80;
+const MAX_ANNOUNCEMENT_BODY_LENGTH = 260;
+const MAX_ANNOUNCEMENT_URL_LENGTH = 2048;
 
 let mainWindow = null;
+const announcementCache = new Map();
 
 function setDockIcon() {
   if (process.platform === "darwin" && fs.existsSync(DOCK_ICON_PATH)) {
@@ -52,13 +66,40 @@ function watchRegistry() {
   }
 }
 
+function installContextMenu(window) {
+  window.webContents.on("context-menu", (_event, params) => {
+    const editFlags = params.editFlags ?? {};
+    const hasSelection = Boolean(params.selectionText);
+    if (!params.isEditable && !hasSelection) return;
+
+    const template = params.isEditable
+      ? [
+          { role: "undo", enabled: editFlags.canUndo },
+          { role: "redo", enabled: editFlags.canRedo },
+          { type: "separator" },
+          { role: "cut", enabled: editFlags.canCut },
+          { role: "copy", enabled: editFlags.canCopy || hasSelection },
+          { role: "paste", enabled: editFlags.canPaste },
+          { type: "separator" },
+          { role: "selectAll", enabled: editFlags.canSelectAll },
+        ]
+      : [
+          { role: "copy", enabled: editFlags.canCopy || hasSelection },
+          { type: "separator" },
+          { role: "selectAll", enabled: editFlags.canSelectAll },
+        ];
+
+    Menu.buildFromTemplate(template).popup({ window });
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 860,
     height: 720,
     minWidth: 620,
     minHeight: 480,
-    title: "Codex Auth",
+    title: "Accounts for Codex",
     icon: APP_ICON_PATH,
     // Frameless-style titlebar is macOS-only; Windows/Linux keep the native frame.
     ...(process.platform === "darwin"
@@ -71,19 +112,128 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  installContextMenu(mainWindow);
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
 ipcMain.handle("get-registry", () => readRegistry());
 ipcMain.handle("get-app-version", () => app.getVersion());
 
+function compactText(value, maxLength) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function normalizeExternalUrl(value) {
+  const text = compactText(value, MAX_ANNOUNCEMENT_URL_LENGTH);
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAnnouncement(raw) {
+  const body = compactText(raw?.body, MAX_ANNOUNCEMENT_BODY_LENGTH);
+  if (!body) return null;
+  return {
+    id: typeof raw?.id === "number" || typeof raw?.id === "string" ? raw.id : null,
+    title: compactText(raw?.title, MAX_ANNOUNCEMENT_TITLE_LENGTH),
+    body,
+    url: normalizeExternalUrl(raw?.url),
+    priority: typeof raw?.priority === "number" ? raw.priority : Number(raw?.priority) || 0,
+  };
+}
+
+function normalizeLocale(value) {
+  const text = compactText(value, 32).toLowerCase();
+  if (!text) return "en";
+  return text.split(/[-_]/, 1)[0].replace(/[^a-z0-9]/g, "") || "en";
+}
+
+function announcementCacheKey({ locale, platform, version }) {
+  return `${locale}:${platform}:${version}`;
+}
+
+async function fetchAnnouncements(opts = {}) {
+  const locale = normalizeLocale(opts.locale || app.getLocale());
+  const platform = process.platform;
+  const version = app.getVersion();
+  const cacheKey = announcementCacheKey({ locale, platform, version });
+  const cached = announcementCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.payload;
+
+  try {
+    const url = new URL(ANNOUNCEMENTS_ENDPOINT);
+    url.searchParams.set("app", "codex-auth-desktop");
+    url.searchParams.set("version", version);
+    url.searchParams.set("platform", platform);
+    url.searchParams.set("locale", locale);
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": `codex-auth-desktop/${version}`,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      return cached?.payload ?? { ok: false, error: `Announcement API returned HTTP ${response.status}`, announcements: [] };
+    }
+    const body = await response.json();
+    const ttlSeconds = Number.isFinite(body?.ttl_seconds)
+      ? Math.min(3600, Math.max(60, Math.trunc(body.ttl_seconds)))
+      : ANNOUNCEMENTS_FALLBACK_TTL_SECONDS;
+    const announcements = Array.isArray(body?.announcements)
+      ? body.announcements.map(normalizeAnnouncement).filter(Boolean)
+      : [];
+    const payload = { ok: true, announcements, ttl_seconds: ttlSeconds };
+    announcementCache.set(cacheKey, {
+      expiresAt: Date.now() + ttlSeconds * 1000,
+      payload,
+    });
+    return payload;
+  } catch (err) {
+    return cached?.payload ?? {
+      ok: false,
+      error: `Announcement request failed: ${err.name === "TimeoutError" ? "timed out" : err.message}`,
+      announcements: [],
+    };
+  }
+}
+
+ipcMain.handle("get-announcements", (_event, opts) => fetchAnnouncements(opts));
+
+ipcMain.handle("open-announcement-url", async (_event, url) => {
+  const normalized = normalizeExternalUrl(url);
+  if (!normalized) {
+    const result = { ok: false, error: "Announcement link is not a valid web URL." };
+    trackResult(CODEX_HOME, "open_announcement", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+  try {
+    await shell.openExternal(normalized);
+    const result = { ok: true };
+    trackResult(CODEX_HOME, "open_announcement", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  } catch (err) {
+    const result = { ok: false, error: `Could not open announcement link: ${err.message}` };
+    trackResult(CODEX_HOME, "open_announcement", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+});
+
 ipcMain.handle("switch-account", (_event, accountKey) => {
+  let result;
   try {
     registryOps.switchAccount(CODEX_HOME, String(accountKey ?? ""));
-    return { ok: true, registry: readRegistry() };
+    result = { ok: true, registry: readRegistry() };
   } catch (err) {
-    return { ok: false, error: err.message };
+    result = { ok: false, error: err.message };
   }
+  trackResult(CODEX_HOME, "switch_account", result, buildRegistrySnapshot(result.registry ?? readRegistry()));
+  return result;
 });
 
 const USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
@@ -252,10 +402,20 @@ function persistUsages(entries) {
 
 ipcMain.handle("refresh-account-usage", async (_event, accountKey) => {
   const status = await fetchAccountUsageStatus(accountKey);
-  if (!status.ok) return { ok: false, expired: status.expired, error: status.error };
+  if (!status.ok) {
+    const result = { ok: false, expired: status.expired, error: status.error };
+    trackResult(CODEX_HOME, "refresh_usage", result, { ...buildRegistrySnapshot(readRegistry()), expired: status.expired === true });
+    return result;
+  }
   const persisted = persistUsages([{ accountKey, usage: status.usage }]);
-  if (!persisted.ok) return { ok: false, expired: false, error: persisted.error };
-  return { ok: true, expired: false, registry: { ok: true, data: persisted.data } };
+  if (!persisted.ok) {
+    const result = { ok: false, expired: false, error: persisted.error };
+    trackResult(CODEX_HOME, "refresh_usage", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+  const result = { ok: true, expired: false, registry: { ok: true, data: persisted.data } };
+  trackResult(CODEX_HOME, "refresh_usage", result, buildRegistrySnapshot(result.registry));
+  return result;
 });
 
 const CHECK_CONCURRENCY = 4;
@@ -264,7 +424,11 @@ const CHECK_CONCURRENCY = 4;
 // UI can flag expired sessions.
 ipcMain.handle("check-accounts", async () => {
   const current = readRegistry();
-  if (!current.ok) return { ok: false, error: current.error };
+  if (!current.ok) {
+    const result = { ok: false, error: current.error };
+    trackResult(CODEX_HOME, "check_accounts", result);
+    return result;
+  }
 
   const targets = (current.data.accounts ?? []).filter((a) => a.auth_mode !== "apikey" && a.auth_mode !== "provider");
   const statuses = {};
@@ -286,36 +450,62 @@ ipcMain.handle("check-accounts", async () => {
   await Promise.all(workers);
 
   const persisted = persistUsages(usages);
-  return {
+  const result = {
     ok: true,
     statuses,
     registry: persisted.ok ? { ok: true, data: persisted.data } : readRegistry(),
   };
+  const expired_count = Object.values(statuses).filter((status) => status.expired).length;
+  trackResult(CODEX_HOME, "check_accounts", result, {
+    ...buildRegistrySnapshot(result.registry),
+    checked_count: targets.length,
+    expired_count,
+  });
+  return result;
 });
 
 let activeLogin = null;
 
 // Native browser OAuth (PKCE) sign-in — no external CLI involved.
 ipcMain.handle("login-start", async () => {
-  if (activeLogin) return { ok: false, error: "A login is already in progress." };
+  trackTelemetry(CODEX_HOME, "add_account_start", buildRegistrySnapshot(readRegistry()));
+  if (activeLogin) {
+    const result = { ok: false, error: "A login is already in progress." };
+    trackResult(CODEX_HOME, "add_account", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
   let flow;
   try {
     flow = await startBrowserLogin();
   } catch (err) {
-    return { ok: false, error: err.message };
+    const result = { ok: false, error: err.message };
+    trackResult(CODEX_HOME, "add_account", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
   activeLogin = flow;
   shell.openExternal(flow.authUrl);
   const result = await flow.promise;
   activeLogin = null;
-  if (result.cancelled) return { ok: false, cancelled: true };
-  if (result.error) return { ok: false, error: result.error };
+  if (result.cancelled) {
+    const cancelled = { ok: false, cancelled: true };
+    trackResult(CODEX_HOME, "add_account", cancelled, buildRegistrySnapshot(readRegistry()));
+    return cancelled;
+  }
+  if (result.error) {
+    const failed = { ok: false, error: result.error };
+    trackResult(CODEX_HOME, "add_account", failed, buildRegistrySnapshot(readRegistry()));
+    return failed;
+  }
   try {
     registryOps.persistChatgptLogin(CODEX_HOME, result.tokens);
   } catch (err) {
-    return { ok: false, error: err.message };
+    const failed = { ok: false, error: err.message };
+    trackResult(CODEX_HOME, "add_account", failed, buildRegistrySnapshot(readRegistry()));
+    return failed;
   }
-  return { ok: true, registry: readRegistry() };
+  const added = { ok: true, registry: readRegistry() };
+  trackResult(CODEX_HOME, "add_account", added, buildRegistrySnapshot(added.registry));
+  return added;
 });
 
 const TEST_DEFAULT_MODEL = "gpt-5.5";
@@ -381,12 +571,18 @@ async function testApiEndpoint({ baseUrl, apiKey, model }) {
   return { ok: true, status: response.status, model: respondedModel, reply };
 }
 
-ipcMain.handle("test-api-endpoint", (_event, opts) =>
-  testApiEndpoint({
+ipcMain.handle("test-api-endpoint", async (_event, opts) => {
+  const result = await testApiEndpoint({
     baseUrl: String(opts?.baseUrl ?? "").trim(),
     apiKey: String(opts?.apiKey ?? "").trim(),
     model: String(opts?.model ?? "").trim(),
-  }));
+  });
+  trackResult(CODEX_HOME, "test_api_endpoint", result, {
+    ...buildRegistrySnapshot(readRegistry()),
+    status: result.status ?? null,
+  });
+  return result;
+});
 
 function readStoredProviderTestOptions(accountKey) {
   const current = readRegistry();
@@ -429,8 +625,16 @@ function readStoredProviderTestOptions(accountKey) {
 
 ipcMain.handle("test-provider-account", async (_event, accountKey) => {
   const options = readStoredProviderTestOptions(accountKey);
-  if (!options.ok) return options;
-  return testApiEndpoint(options);
+  if (!options.ok) {
+    trackResult(CODEX_HOME, "test_provider_account", options, buildRegistrySnapshot(readRegistry()));
+    return options;
+  }
+  const result = await testApiEndpoint(options);
+  trackResult(CODEX_HOME, "test_provider_account", result, {
+    ...buildRegistrySnapshot(readRegistry()),
+    status: result.status ?? null,
+  });
+  return result;
 });
 
 // The renderer orchestrates the pre-add endpoint test (via
@@ -441,12 +645,20 @@ ipcMain.handle("login-api", (_event, opts) => {
   const apiKey = String(opts?.apiKey ?? "").trim();
   const name = String(opts?.name ?? "").trim();
   const model = String(opts?.model ?? "").trim();
-  if (!baseUrl || !apiKey) return { ok: false, error: "Endpoint URL and API key are required." };
+  if (!baseUrl || !apiKey) {
+    const result = { ok: false, error: "Endpoint URL and API key are required." };
+    trackResult(CODEX_HOME, "add_api", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
   try {
     registryOps.addProviderAccount(CODEX_HOME, { baseUrl, apiKey, name, model });
-    return { ok: true, registry: readRegistry() };
+    const result = { ok: true, registry: readRegistry() };
+    trackResult(CODEX_HOME, "add_api", result, buildRegistrySnapshot(result.registry));
+    return result;
   } catch (err) {
-    return { ok: false, error: err.message };
+    const result = { ok: false, error: err.message };
+    trackResult(CODEX_HOME, "add_api", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
 });
 
@@ -458,12 +670,15 @@ ipcMain.handle("login-cancel", () => {
 
 // Confirmation happens in the renderer's themed modal before this is called.
 ipcMain.handle("remove-account", (_event, accountKey) => {
+  let result;
   try {
     registryOps.removeAccount(CODEX_HOME, String(accountKey ?? ""));
-    return { ok: true, registry: readRegistry() };
+    result = { ok: true, registry: readRegistry() };
   } catch (err) {
-    return { ok: false, error: err.message };
+    result = { ok: false, error: err.message };
   }
+  trackResult(CODEX_HOME, "remove_account", result, buildRegistrySnapshot(result.registry ?? readRegistry()));
+  return result;
 });
 
 // ---------- account import / export (JSON migration) ----------
@@ -489,9 +704,17 @@ function readAccountAuth(accountKey, activeKey) {
 
 ipcMain.handle("export-accounts", async () => {
   const current = readRegistry();
-  if (!current.ok) return { ok: false, error: current.error };
+  if (!current.ok) {
+    const result = { ok: false, error: current.error };
+    trackResult(CODEX_HOME, "export_accounts", result);
+    return result;
+  }
   const accounts = current.data.accounts ?? [];
-  if (accounts.length === 0) return { ok: false, error: "No accounts to export." };
+  if (accounts.length === 0) {
+    const result = { ok: false, error: "No accounts to export." };
+    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    return result;
+  }
 
   const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
   const picked = await dialog.showSaveDialog(mainWindow, {
@@ -499,7 +722,11 @@ ipcMain.handle("export-accounts", async () => {
     defaultPath: path.join(app.getPath("downloads"), `codex-auth-accounts-${stamp}.json`),
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
-  if (picked.canceled || !picked.filePath) return { ok: false, cancelled: true };
+  if (picked.canceled || !picked.filePath) {
+    const result = { ok: false, cancelled: true };
+    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    return result;
+  }
 
   const auths = {};
   const missing = [];
@@ -519,9 +746,17 @@ ipcMain.handle("export-accounts", async () => {
   try {
     fs.writeFileSync(picked.filePath, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
   } catch (err) {
-    return { ok: false, error: `Failed to write export file: ${err.message}` };
+    const result = { ok: false, error: `Failed to write export file: ${err.message}` };
+    trackResult(CODEX_HOME, "export_accounts", result, buildRegistrySnapshot(current));
+    return result;
   }
-  return { ok: true, path: picked.filePath, exported: Object.keys(auths).length, missing };
+  const result = { ok: true, path: picked.filePath, exported: Object.keys(auths).length, missing };
+  trackResult(CODEX_HOME, "export_accounts", result, {
+    ...buildRegistrySnapshot(current),
+    exported_count: result.exported,
+    missing_count: missing.length,
+  });
+  return result;
 });
 
 ipcMain.handle("import-accounts", async () => {
@@ -530,31 +765,47 @@ ipcMain.handle("import-accounts", async () => {
     properties: ["openFile"],
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
-  if (picked.canceled || picked.filePaths.length === 0) return { ok: false, cancelled: true };
+  if (picked.canceled || picked.filePaths.length === 0) {
+    const result = { ok: false, cancelled: true };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
 
   let payload;
   try {
     payload = JSON.parse(fs.readFileSync(picked.filePaths[0], "utf8"));
   } catch (err) {
-    return { ok: false, error: `Cannot read the file: ${err.message}` };
+    const result = { ok: false, error: `Cannot read the file: ${err.message}` };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
   if (payload?.type !== EXPORT_FILE_TYPE || !Array.isArray(payload?.registry?.accounts)) {
-    return { ok: false, error: "This file is not a codex-auth account export." };
+    const result = { ok: false, error: "This file is not a codex-auth account export." };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
   if (typeof payload.version === "number" && payload.version > EXPORT_FILE_VERSION) {
-    return { ok: false, error: "This export was created by a newer app version." };
+    const result = { ok: false, error: "This export was created by a newer app version." };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
 
   const incoming = payload.registry.accounts.filter(
     (a) => a && typeof a.account_key === "string" && a.account_key.length > 0,
   );
-  if (incoming.length === 0) return { ok: false, error: "The export file contains no accounts." };
+  if (incoming.length === 0) {
+    const result = { ok: false, error: "The export file contains no accounts." };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
 
   const accountsDir = path.join(CODEX_HOME, "accounts");
   try {
     fs.mkdirSync(accountsDir, { recursive: true });
   } catch (err) {
-    return { ok: false, error: `Cannot create ${accountsDir}: ${err.message}` };
+    const result = { ok: false, error: `Cannot create ${accountsDir}: ${err.message}` };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
 
   // Merge into the existing registry (imported entries win on conflicts).
@@ -585,7 +836,9 @@ ipcMain.handle("import-accounts", async () => {
         fs.writeFileSync(path.join(CODEX_HOME, "auth.json"), serialized, { mode: 0o600 });
       }
     } catch (err) {
-      return { ok: false, error: `Failed to write auth for ${account.email || account.account_key}: ${err.message}` };
+      const result = { ok: false, error: `Failed to write auth for ${account.email || account.account_key}: ${err.message}` };
+      trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+      return result;
     }
     const index = existing.findIndex((a) => a.account_key === account.account_key);
     if (index >= 0) {
@@ -597,22 +850,36 @@ ipcMain.handle("import-accounts", async () => {
     }
   }
   if (added === 0 && updated === 0) {
-    return { ok: false, error: "No account in the file had usable auth data." };
+    const result = { ok: false, error: "No account in the file had usable auth data." };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
 
   base.accounts = existing;
   try {
     fs.writeFileSync(REGISTRY_PATH, JSON.stringify(base, null, 2) + "\n", { mode: 0o600 });
   } catch (err) {
-    return { ok: false, error: `Failed to save registry: ${err.message}` };
+    const result = { ok: false, error: `Failed to save registry: ${err.message}` };
+    trackResult(CODEX_HOME, "import_accounts", result, buildRegistrySnapshot(readRegistry()));
+    return result;
   }
-  return { ok: true, added, updated, skipped, registry: readRegistry() };
+  const result = { ok: true, added, updated, skipped, registry: readRegistry() };
+  trackResult(CODEX_HOME, "import_accounts", result, {
+    ...buildRegistrySnapshot(result.registry),
+    added_count: added,
+    updated_count: updated,
+    skipped_count: skipped,
+  });
+  return result;
 });
 
 app.whenReady().then(() => {
   setDockIcon();
+  initTelemetry({ codexHome: CODEX_HOME, appVersion: app.getVersion(), locale: app.getLocale() });
   createWindow();
   watchRegistry();
+  trackTelemetry(CODEX_HOME, "app_start", buildRegistrySnapshot(readRegistry()));
+  flushTelemetry(CODEX_HOME);
   app.on("activate", () => {
     setDockIcon();
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -626,4 +893,5 @@ app.on("window-all-closed", () => {
 app.on("quit", () => {
   watcher?.close();
   activeLogin?.cancel();
+  shutdownTelemetry(CODEX_HOME);
 });

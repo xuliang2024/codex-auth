@@ -31,6 +31,29 @@ const modalMessageEl = document.getElementById("modal-message");
 const modalCancelBtn = document.getElementById("modal-cancel");
 const modalConfirmBtn = document.getElementById("modal-confirm");
 const langSelect = document.getElementById("lang-select");
+const announcementBar = document.getElementById("announcement-bar");
+const viewListBtn = document.getElementById("view-list-btn");
+const viewGridBtn = document.getElementById("view-grid-btn");
+
+// View mode (list | grid) persists in localStorage across restarts.
+const VIEW_MODE_KEY = "codex-auth-view-mode";
+let viewMode = localStorage.getItem(VIEW_MODE_KEY) === "grid" ? "grid" : "list";
+
+function applyViewMode() {
+  listEl.classList.toggle("grid-view", viewMode === "grid");
+  viewListBtn.classList.toggle("active", viewMode === "list");
+  viewGridBtn.classList.toggle("active", viewMode === "grid");
+}
+
+function setViewMode(mode) {
+  if (mode === viewMode) return;
+  viewMode = mode;
+  localStorage.setItem(VIEW_MODE_KEY, mode);
+  applyViewMode();
+}
+
+viewListBtn.addEventListener("click", () => setViewMode("list"));
+viewGridBtn.addEventListener("click", () => setViewMode("grid"));
 
 // Themed replacement for the native dialog.showMessageBox confirmations.
 // Resolves true when confirmed; Esc / backdrop click / Cancel resolve false.
@@ -85,6 +108,7 @@ function showConfirm({ title, message, confirmLabel, cancelLabel, danger = false
 let registry = null;
 let busy = false;
 let toastTimer = null;
+let announcements = [];
 // account_key -> { expired: boolean, error: string | null }
 const accountStatuses = new Map();
 // account_key -> { state: "pending" | "success" | "error", message: string }
@@ -134,6 +158,68 @@ function esc(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
   return div.innerHTML;
+}
+
+function announcementText(announcement) {
+  return [announcement.title, announcement.body].filter(Boolean).join(": ");
+}
+
+function announcementItemHtml(announcement, duplicate = false) {
+  const url = announcement.url || "";
+  const clickable = Boolean(url) && !duplicate;
+  return `
+    <span
+      class="announcement-item ${url ? "clickable" : ""}"
+      ${url ? `data-url="${esc(url)}"` : ""}
+      ${clickable ? `role="link" tabindex="0" title="${esc(url)}"` : ""}
+      ${duplicate ? "aria-hidden=\"true\"" : ""}
+    >
+      <span class="announcement-message">${esc(announcementText(announcement))}</span>
+    </span>`;
+}
+
+function renderAnnouncements() {
+  if (!announcementBar) return;
+  const visible = announcements.filter((announcement) => announcement?.body);
+  if (visible.length === 0) {
+    announcementBar.classList.add("hidden");
+    announcementBar.innerHTML = "";
+    return;
+  }
+
+  const separator = `<span class="announcement-separator" aria-hidden="true">&bull;</span>`;
+  const items = visible.map((announcement) => announcementItemHtml(announcement)).join(separator);
+  const duplicateItems = visible.length > 1
+    ? visible.map((announcement) => announcementItemHtml(announcement, true)).join(separator)
+    : "";
+  const duration = Math.max(18, Math.min(60, visible.reduce((sum, item) => sum + announcementText(item).length, 0) / 3));
+
+  announcementBar.innerHTML = `
+    <div class="announcement-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m3 11 18-5v12L3 14v-3Z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    </div>
+    <div class="announcement-viewport">
+      <div class="announcement-track ${visible.length > 1 ? "scrolling" : ""}" style="--announcement-duration:${duration}s">
+        <span class="announcement-group">${items}</span>
+        ${duplicateItems ? `<span class="announcement-group duplicate" aria-hidden="true">${separator}${duplicateItems}</span>` : ""}
+      </div>
+    </div>`;
+  announcementBar.classList.remove("hidden");
+}
+
+async function loadAnnouncements() {
+  if (!window.codexAuth.getAnnouncements) return;
+  let result;
+  try {
+    result = await window.codexAuth.getAnnouncements({ locale: I18N.get() });
+  } catch (error) {
+    result = { ok: false, error: String(error) };
+  }
+  announcements = result.ok && Array.isArray(result.announcements) ? result.announcements : [];
+  renderAnnouncements();
 }
 
 function render() {
@@ -302,6 +388,22 @@ listEl.addEventListener("click", async (event) => {
     applyResult(result, t("toast.removed", { email }));
     setBusy(false);
   }
+});
+
+announcementBar?.addEventListener("click", async (event) => {
+  const item = event.target.closest(".announcement-item[data-url]");
+  if (!item) return;
+  const result = await window.codexAuth.openAnnouncementUrl(item.dataset.url);
+  if (!result.ok) showToast(result.error ?? t("toast.openLinkFailed"), "error");
+});
+
+announcementBar?.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const item = event.target.closest(".announcement-item[data-url]");
+  if (!item) return;
+  event.preventDefault();
+  const result = await window.codexAuth.openAnnouncementUrl(item.dataset.url);
+  if (!result.ok) showToast(result.error ?? t("toast.openLinkFailed"), "error");
 });
 
 function applyStatuses(statuses) {
@@ -507,6 +609,7 @@ importBtn.addEventListener("click", async () => {
 langSelect.addEventListener("change", () => {
   I18N.set(langSelect.value);
   render();
+  loadAnnouncements();
 });
 
 window.codexAuth.onRegistryChanged((payload) => {
@@ -520,6 +623,8 @@ window.codexAuth.onRegistryChanged((payload) => {
 (async function init() {
   langSelect.value = I18N.get();
   I18N.apply();
+  applyViewMode();
+  loadAnnouncements();
   const appVersion = await window.codexAuth.getAppVersion?.();
   if (appVersion) {
     appVersionEl.textContent = `v${appVersion}`;

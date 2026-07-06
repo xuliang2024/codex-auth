@@ -1,7 +1,7 @@
 {
   "name": "codex-auth-desktop",
-  "version": "0.1.1",
-  "description": "Desktop account switcher for codex-auth",
+  "version": "0.1.2",
+  "description": "Desktop account manager for Codex",
   "private": true,
   "type": "module",
   "main": "main.js",
@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "com.loongphy.codex-auth-desktop",
-    "productName": "Codex Auth",
+    "productName": "Accounts for Codex",
     "files": [
       "main.js",
       "preload.cjs",
@@ -60,14 +60,21 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Accounts for Codex",
+      "artifactName": "${productName} Setup ${version}-${arch}.${ext}",
+      "buildUniversalInstaller": false,
+      "differentialPackage": false,
+      "useZip": true
     },
     "linux": {
       "icon": "build/icon.png"
     },
     "afterSign": "./scripts/notarize.cjs",
     "dmg": {
-      "title": "Codex Auth",
+      "title": "Accounts for Codex",
       "contents": [
         {
           "x": 130,

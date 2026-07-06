@@ -45,9 +45,9 @@ After that, you can use `codex-auth login`, `codex-auth login --device-auth`, or
 
 ## Desktop App
 
-The desktop app provides a visual account switcher with usage bars, one-click switching, and support for both ChatGPT sign-in and custom API providers.
+The **Accounts for Codex** desktop app provides a visual account switcher with usage bars, one-click switching, and support for both ChatGPT sign-in and custom API providers.
 
-![Codex Auth desktop app](./docs/assets/desktop-app.png)
+![Accounts for Codex desktop app](./docs/assets/desktop-app.png)
 
 Install dependencies and start the app from the repository:
 

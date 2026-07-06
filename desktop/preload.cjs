@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("codexAuth", {
   platform: process.platform,
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   getRegistry: () => ipcRenderer.invoke("get-registry"),
+  getAnnouncements: (opts) => ipcRenderer.invoke("get-announcements", opts),
+  openAnnouncementUrl: (url) => ipcRenderer.invoke("open-announcement-url", url),
   switchAccount: (accountKey) => ipcRenderer.invoke("switch-account", accountKey),
   checkAccounts: () => ipcRenderer.invoke("check-accounts"),
   refreshAccountUsage: (accountKey) => ipcRenderer.invoke("refresh-account-usage", accountKey),

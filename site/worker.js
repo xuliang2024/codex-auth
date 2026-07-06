@@ -7,6 +7,10 @@ function objectKeyFromPath(pathname) {
     return INDEX_DOCUMENT;
   }
 
+  if (trimmed === "telemetry") {
+    return `telemetry/${INDEX_DOCUMENT}`;
+  }
+
   if (trimmed.endsWith("/")) {
     return `${trimmed}${INDEX_DOCUMENT}`;
   }

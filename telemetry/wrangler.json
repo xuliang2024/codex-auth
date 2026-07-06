@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "codex-auth-telemetry",
+  "main": "./worker.js",
+  "compatibility_date": "2026-07-05",
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "TELEMETRY_DB",
+      "database_name": "codex-auth-telemetry",
+      "database_id": "06e7bea3-5d5b-4095-a187-36f90b5c0ca9"
+    }
+  ]
+}

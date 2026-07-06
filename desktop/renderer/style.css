@@ -61,13 +61,16 @@ body.platform-linux .titlebar {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  gap: 14px 18px;
   padding: 0 24px 16px;
+  flex-wrap: wrap;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1 1 260px;
   min-width: 0;
 }
 
@@ -94,6 +97,8 @@ body.platform-linux .titlebar {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .app-version {
@@ -112,6 +117,10 @@ body.platform-linux .titlebar {
   margin-top: 3px;
   color: var(--text-dim);
   font-size: 12.5px;
+  max-width: min(360px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- buttons ---------- */
@@ -165,6 +174,121 @@ body.platform-linux .titlebar {
 .spin svg { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- announcements ---------- */
+
+.announcement-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  margin: 14px 24px 0;
+  padding: 0 12px;
+  background: rgba(232, 178, 62, 0.08);
+  border: 1px solid rgba(232, 178, 62, 0.24);
+  border-radius: 8px;
+  color: #f2d184;
+  overflow: hidden;
+}
+
+.announcement-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8b23e;
+}
+
+.announcement-viewport {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.announcement-track {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.announcement-track.scrolling {
+  max-width: none;
+  width: max-content;
+  animation: announcement-scroll var(--announcement-duration, 24s) linear infinite;
+}
+
+.announcement-bar:hover .announcement-track.scrolling {
+  animation-play-state: paused;
+}
+
+.announcement-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.announcement-item {
+  max-width: min(760px, calc(100vw - 124px));
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.announcement-item.clickable {
+  cursor: pointer;
+  color: #f4d891;
+}
+
+.announcement-item.clickable:hover .announcement-message,
+.announcement-item:focus-visible .announcement-message {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.announcement-item:focus-visible {
+  outline: 1px solid rgba(232, 178, 62, 0.5);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.announcement-message {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.announcement-separator {
+  color: rgba(232, 178, 62, 0.45);
+  font-size: 12px;
+}
+
+@keyframes announcement-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-track.scrolling {
+    max-width: 100%;
+    width: 100%;
+    animation: none;
+  }
+
+  .announcement-group.duplicate {
+    display: none;
+  }
+}
+
 /* ---------- account list ---------- */
 
 .account-list {
@@ -185,6 +309,44 @@ body.platform-linux .titlebar {
 }
 
 .account-card:hover { background: var(--surface-hover); }
+
+/* ---------- grid (flow) view ---------- */
+
+.account-list.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
+}
+
+.account-list.grid-view .card-top {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.account-list.grid-view .identity {
+  flex: 1 1 100%;
+}
+
+/* Long emails wrap onto multiple lines instead of being truncated. */
+.account-list.grid-view .email {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.account-list.grid-view .card-actions {
+  margin-left: auto;
+}
+
+.account-list.grid-view .usage-row {
+  grid-template-columns: 40px minmax(0, 1fr) 40px auto;
+  gap: 8px;
+}
+
+.account-list.grid-view .usage-reset {
+  font-size: 10.5px;
+}
 
 .account-card.active {
   background: var(--surface-active);
@@ -356,8 +518,38 @@ body.platform-linux .titlebar {
 .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  flex: 10 1 500px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
+
+.view-toggle {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 7px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.view-btn + .view-btn { border-left: 1px solid var(--border); }
+.view-btn:hover { color: var(--text); background: var(--surface-hover); }
+.view-btn.active { color: var(--accent); background: var(--accent-soft); }
+.view-btn svg { flex-shrink: 0; }
 
 .lang-select {
   appearance: none;

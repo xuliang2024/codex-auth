@@ -6,7 +6,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
-const PRODUCT_NAME = "Codex Auth";
+const PRODUCT_NAME = "Accounts for Codex";
 
 function maskValue(value) {
   if (!value) return "not set";

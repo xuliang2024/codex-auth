@@ -13,6 +13,7 @@ After modifying any `.zig` file, always run `zig build run -- list` to verify th
 # Release Process
 
 - When updating and pushing a release version, always follow [docs/release.md](./docs/release.md).
+- When packaging and publishing the Electron desktop app, follow [docs/desktop-release.md](./docs/desktop-release.md).
 
 # Docs
 

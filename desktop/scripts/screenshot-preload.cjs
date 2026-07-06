@@ -80,14 +80,20 @@ const mockRegistry = {
 
 contextBridge.exposeInMainWorld("codexAuth", {
   platform: process.platform,
+  getAppVersion: async () => "0.1.1",
   getRegistry: async () => ({ ok: true, data: mockRegistry }),
+  getAnnouncements: async () => ({ ok: true, announcements: [] }),
+  openAnnouncementUrl: async () => ({ ok: true }),
   switchAccount: async () => ({ ok: false }),
   checkAccounts: async () => ({ ok: true, statuses: {}, registry: { ok: true, data: mockRegistry } }),
   refreshAccountUsage: async () => ({ ok: false }),
   loginStart: async () => ({ ok: false }),
   loginApi: async () => ({ ok: false }),
   testApiEndpoint: async () => ({ ok: false }),
+  testProviderAccount: async () => ({ ok: false }),
   loginCancel: async () => ({ ok: false }),
   removeAccount: async () => ({ ok: false }),
+  exportAccounts: async () => ({ ok: false }),
+  importAccounts: async () => ({ ok: false }),
   onRegistryChanged: () => () => {},
 });

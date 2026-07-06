@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Accounts for Codex Telemetry | Codex Hub</title>
+    <meta name="robots" content="noindex, nofollow">
+    <meta
+      name="description"
+      content="Aggregate anonymous Accounts for Codex telemetry."
+    >
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="telemetry-page">
+    <header class="site-header" aria-label="Telemetry navigation">
+      <a class="brand" href="/" aria-label="Accounts for Codex home">
+        <img class="brand-icon" src="/assets/icon.png" width="48" height="48" alt="" aria-hidden="true">
+        <span>Accounts for Codex</span>
+      </a>
+      <div class="telemetry-status" id="telemetry-status">Loading</div>
+    </header>
+
+    <main class="telemetry-shell">
+      <section class="telemetry-hero" aria-labelledby="telemetry-title">
+        <div>
+          <p class="eyebrow">Anonymous usage telemetry</p>
+          <h1 id="telemetry-title">Accounts for Codex Stats</h1>
+          <p class="hero-lede">
+            Aggregate install and feature activity from the desktop client. No email,
+            token, API key, provider URL, account key, or local path is stored here.
+          </p>
+        </div>
+        <div class="telemetry-meta">
+          <span>Endpoint</span>
+          <strong>codex-auth-telemetry</strong>
+          <span id="telemetry-updated">Waiting for data</span>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Telemetry totals">
+        <article class="metric-card">
+          <span>Total installs</span>
+          <strong id="metric-installs">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Total events</span>
+          <strong id="metric-events">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Events in 24h</span>
+          <strong id="metric-events-24h">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Last event</span>
+          <strong id="metric-last-event">--</strong>
+        </article>
+      </section>
+
+      <section class="telemetry-grid">
+        <article class="stats-panel account-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Latest account snapshot</p>
+            <h2>Current app shape</h2>
+          </div>
+          <div id="account-snapshot" class="snapshot-grid"></div>
+        </article>
+
+        <article class="stats-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Event mix</p>
+            <h2>Events by name</h2>
+          </div>
+          <div id="events-by-name" class="bar-list"></div>
+        </article>
+
+        <article class="stats-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Client versions</p>
+            <h2>Installs by version</h2>
+          </div>
+          <div id="installs-by-version" class="bar-list"></div>
+        </article>
+
+        <article class="stats-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Last 14 days</p>
+            <h2>Event trend</h2>
+          </div>
+          <div id="events-by-day" class="day-strip"></div>
+        </article>
+      </section>
+
+      <section class="stats-panel recent-panel" aria-labelledby="recent-events-title">
+        <div class="panel-heading table-heading">
+          <div>
+            <p class="eyebrow">Recent activity</p>
+            <h2 id="recent-events-title">Latest events</h2>
+          </div>
+          <button class="button button-secondary telemetry-refresh" id="refresh-telemetry" type="button">Refresh</button>
+        </div>
+        <div class="telemetry-table-wrap">
+          <table class="telemetry-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Version</th>
+                <th>Platform</th>
+                <th>Locale</th>
+                <th>Received</th>
+                <th>Properties</th>
+              </tr>
+            </thead>
+            <tbody id="recent-events"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/telemetry/telemetry.js"></script>
+  </body>
+</html>

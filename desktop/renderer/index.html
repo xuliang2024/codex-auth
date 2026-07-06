@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
-  <title>Codex Auth</title>
+  <title>Accounts for Codex</title>
   <link rel="icon" href="../build/icon.svg" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -15,7 +15,7 @@
         <img class="app-mark" src="../build/icon.svg" alt="" aria-hidden="true" />
         <div class="header-copy">
           <div class="title-line">
-            <h1 data-i18n="app.title">Codex Accounts</h1>
+            <h1 data-i18n="app.title">Accounts for Codex</h1>
             <span id="app-version" class="app-version hidden"></span>
           </div>
           <span class="subtitle" id="summary">—</span>
@@ -57,6 +57,23 @@
           </svg>
           <span data-i18n="btn.export">Export</span>
         </button>
+        <div class="view-toggle" role="group">
+          <button id="view-list-btn" class="view-btn" data-i18n-title="view.list.tip">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+          </button>
+          <button id="view-grid-btn" class="view-btn" data-i18n-title="view.grid.tip">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+        </div>
         <select id="lang-select" class="lang-select" data-i18n-title="lang.tip">
           <option value="en">English</option>
           <option value="zh">中文</option>
@@ -95,6 +112,8 @@
       <button id="api-form-save" class="btn btn-primary" data-i18n="apiForm.save">Add &amp; Switch</button>
     </div>
   </div>
+
+  <div id="announcement-bar" class="announcement-bar hidden" role="region" aria-label="Announcements"></div>
 
   <main id="account-list" class="account-list"></main>
 
