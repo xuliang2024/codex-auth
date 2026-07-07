@@ -4,6 +4,8 @@
 
 `codex-auth` is a command-line tool and desktop app for switching Codex accounts.
 
+Community: thanks to [LINUX DO](https://linux.do/) for discussion and feedback.
+
 ## Install
 
 Install with npm:
