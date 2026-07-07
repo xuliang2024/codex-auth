@@ -29,6 +29,10 @@ const ANNOUNCEMENTS_FALLBACK_TTL_SECONDS = 300;
 const MAX_ANNOUNCEMENT_TITLE_LENGTH = 80;
 const MAX_ANNOUNCEMENT_BODY_LENGTH = 260;
 const MAX_ANNOUNCEMENT_URL_LENGTH = 2048;
+const CODEX_DOWNLOAD_URLS = {
+  darwin: "https://persistent.oaistatic.com/codex-app-prod/Codex.dmg",
+  win32: "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+};
 
 let mainWindow = null;
 const announcementCache = new Map();
@@ -41,11 +45,10 @@ function setDockIcon() {
 
 function readRegistry() {
   try {
-    const raw = fs.readFileSync(REGISTRY_PATH, "utf8");
-    const data = JSON.parse(raw);
+    const data = registryOps.loadRegistry(CODEX_HOME);
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: err.code === "ENOENT" ? "registry.json not found. Add accounts with `codex-auth login` first." : String(err) };
+    return { ok: false, error: String(err) };
   }
 }
 
@@ -99,8 +102,8 @@ function installContextMenu(window) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 860,
-    height: 720,
+    width: 1068,
+    height: 722,
     minWidth: 620,
     minHeight: 480,
     title: "Accounts for Codex",
@@ -224,6 +227,25 @@ ipcMain.handle("open-announcement-url", async (_event, url) => {
   } catch (err) {
     const result = { ok: false, error: `Could not open announcement link: ${err.message}` };
     trackResult(CODEX_HOME, "open_announcement", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+});
+
+ipcMain.handle("open-codex-download", async () => {
+  const url = CODEX_DOWNLOAD_URLS[process.platform];
+  if (!url) {
+    const result = { ok: false, error: "Codex download is available for macOS and Windows." };
+    trackResult(CODEX_HOME, "open_codex_download", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  }
+  try {
+    await shell.openExternal(url);
+    const result = { ok: true, platform: process.platform };
+    trackResult(CODEX_HOME, "open_codex_download", result, buildRegistrySnapshot(readRegistry()));
+    return result;
+  } catch (err) {
+    const result = { ok: false, error: `Could not open Codex download: ${err.message}` };
+    trackResult(CODEX_HOME, "open_codex_download", result, buildRegistrySnapshot(readRegistry()));
     return result;
   }
 });

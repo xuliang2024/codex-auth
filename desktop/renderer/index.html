@@ -57,6 +57,14 @@
           </svg>
           <span data-i18n="btn.export">Export</span>
         </button>
+        <button id="download-codex-btn" class="btn btn-secondary" data-i18n-title="btn.downloadCodex.tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span data-i18n="btn.downloadCodex">Download Codex</span>
+        </button>
         <div class="view-toggle" role="group">
           <button id="view-list-btn" class="view-btn" data-i18n-title="view.list.tip">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -119,13 +127,46 @@
 
   <div id="empty-state" class="empty-state hidden">
     <p class="empty-title" data-i18n="empty.title">No accounts found</p>
-    <p class="empty-hint" data-i18n-html="empty.hint">Run <code>codex-auth login</code> in a terminal to add your first account.</p>
-    <button id="empty-login-btn" class="btn btn-primary empty-action" data-i18n-title="btn.addAccount.tip">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-      <span data-i18n="btn.addAccount">Add Account</span>
-    </button>
+    <p class="empty-hint" data-i18n="empty.hint">Choose how you want to get started.</p>
+    <div class="empty-actions">
+      <button id="empty-import-btn" class="empty-option" data-i18n-title="btn.import.tip">
+        <span class="empty-option-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </span>
+        <span class="empty-option-copy">
+          <span class="empty-option-title" data-i18n="btn.import">Import</span>
+          <span class="empty-option-desc" data-i18n="empty.importDesc">Use this if you already have a JSON backup or share link.</span>
+        </span>
+      </button>
+      <button id="empty-login-btn" class="empty-option empty-option-primary" data-i18n-title="btn.addAccount.tip">
+        <span class="empty-option-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </span>
+        <span class="empty-option-copy">
+          <span class="empty-option-title" data-i18n="empty.newAccount">New Account</span>
+          <span class="empty-option-desc" data-i18n="empty.newAccountDesc">Use this for first-time setup. A browser sign-in will open.</span>
+        </span>
+      </button>
+      <button id="empty-download-codex-btn" class="empty-option" data-i18n-title="btn.downloadCodex.tip">
+        <span class="empty-option-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </span>
+        <span class="empty-option-copy">
+          <span class="empty-option-title" data-i18n="btn.downloadCodex">Download Codex</span>
+          <span class="empty-option-desc" data-i18n="empty.downloadCodexDesc">Use this if Codex is not installed on this computer yet.</span>
+        </span>
+      </button>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>

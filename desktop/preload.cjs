@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("codexAuth", {
   getRegistry: () => ipcRenderer.invoke("get-registry"),
   getAnnouncements: (opts) => ipcRenderer.invoke("get-announcements", opts),
   openAnnouncementUrl: (url) => ipcRenderer.invoke("open-announcement-url", url),
+  openCodexDownload: () => ipcRenderer.invoke("open-codex-download"),
   switchAccount: (accountKey) => ipcRenderer.invoke("switch-account", accountKey),
   checkAccounts: () => ipcRenderer.invoke("check-accounts"),
   refreshAccountUsage: (accountKey) => ipcRenderer.invoke("refresh-account-usage", accountKey),

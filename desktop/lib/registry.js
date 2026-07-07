@@ -257,6 +257,8 @@ const TAIL_BEGIN = "# >>> codex-auth provider tables (do not edit) >>>";
 const TAIL_END = "# <<< codex-auth provider tables <<<";
 const DISABLED_PREFIX = "#codex-auth:disabled# ";
 const INCOMPATIBLE_PREFIX = "#codex-auth:incompatible# ";
+export const DEFAULT_PROVIDER_MODEL = "gpt-5.5";
+export const DEFAULT_PROVIDER_REASONING_EFFORT = "medium";
 const MANAGED_TOP_LEVEL_KEYS = new Set([
   "model_provider",
   "model",
@@ -713,8 +715,8 @@ export function addProviderAccount(codexHome, { baseUrl, apiKey, name, model }) 
   const provider = {
     id: providerId,
     base_url: normalizedUrl,
-    model: model ? String(model).trim() || null : null,
-    model_reasoning_effort: null,
+    model: String(model ?? "").trim() || DEFAULT_PROVIDER_MODEL,
+    model_reasoning_effort: DEFAULT_PROVIDER_REASONING_EFFORT,
   };
   const recordKey = providerAccountKey(host, trimmedKey);
 

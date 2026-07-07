@@ -919,6 +919,52 @@ test "Scenario: Given device auth login when running login then it forwards the 
     try std.testing.expectEqualStrings(fake_auth, active_auth);
 }
 
+test "Scenario: Given API provider login without model options then defaults are written" {
+    const gpa = std.testing.allocator;
+    const project_root = try projectRootAlloc(gpa);
+    defer gpa.free(project_root);
+    try buildCliBinary(gpa, project_root);
+
+    var tmp = fs.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const home_root = try tmp.dir.realpathAlloc(gpa, ".");
+    defer gpa.free(home_root);
+
+    const result = try runCliWithIsolatedHome(gpa, project_root, home_root, &[_][]const u8{
+        "login",
+        "--api",
+        "--base-url",
+        "https://codex.apiz.ai",
+        "--key",
+        "sk-test-defaults",
+        "--name",
+        "apiz",
+    });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    try expectSuccess(result);
+
+    const codex_home = try codexHomeAlloc(gpa, home_root);
+    defer gpa.free(codex_home);
+    var reg = try registry.loadRegistry(gpa, codex_home);
+    defer reg.deinit(gpa);
+
+    const idx = registry.findAccountIndexByAccountKey(&reg, reg.active_account_key.?) orelse return error.TestExpectedEqual;
+    const provider = reg.accounts.items[idx].provider.?;
+    try std.testing.expectEqualStrings(registry.default_provider_model, provider.model.?);
+    try std.testing.expectEqualStrings(registry.default_provider_reasoning_effort, provider.model_reasoning_effort.?);
+
+    const config_path = try registry.provider_toml.configPath(gpa, codex_home);
+    defer gpa.free(config_path);
+    const config = try fixtures.readFileAlloc(gpa, config_path);
+    defer gpa.free(config);
+    try std.testing.expect(std.mem.indexOf(u8, config, "model = \"gpt-5.5\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config, "review_model = \"gpt-5.5\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config, "model_reasoning_effort = \"medium\"") != null);
+}
+
 test "Scenario: Given strict codex login when running login then scratch CODEX_HOME exists before launch" {
     const gpa = std.testing.allocator;
     const project_root = try projectRootAlloc(gpa);

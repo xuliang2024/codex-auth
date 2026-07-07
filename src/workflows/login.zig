@@ -163,11 +163,13 @@ fn handleApiLogin(
     };
     defer allocator.free(provider_id);
 
+    const model = api_opts.model orelse registry.default_provider_model;
+    const reasoning_effort = api_opts.reasoning_effort orelse registry.default_provider_reasoning_effort;
     var provider = registry.ProviderConfig{
         .id = try allocator.dupe(u8, provider_id),
         .base_url = try allocator.dupe(u8, base_url),
-        .model = try registry.cloneOptionalStringAlloc(allocator, api_opts.model),
-        .model_reasoning_effort = try registry.cloneOptionalStringAlloc(allocator, api_opts.reasoning_effort),
+        .model = try registry.cloneOptionalStringAlloc(allocator, model),
+        .model_reasoning_effort = try registry.cloneOptionalStringAlloc(allocator, reasoning_effort),
     };
     var provider_owned = true;
     defer if (provider_owned) registry.freeProviderConfig(allocator, &provider);

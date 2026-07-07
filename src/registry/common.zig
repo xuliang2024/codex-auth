@@ -79,6 +79,9 @@ pub const RolloutSignature = struct {
 
 /// Custom API provider (endpoint + key) settings mirrored into
 /// `config.toml` while the account is active.
+pub const default_provider_model = "gpt-5.5";
+pub const default_provider_reasoning_effort = "medium";
+
 pub const ProviderConfig = struct {
     id: []u8,
     base_url: []u8,

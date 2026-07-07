@@ -7,10 +7,13 @@ const appVersionEl = document.getElementById("app-version");
 const refreshBtn = document.getElementById("refresh-btn");
 const loginBtn = document.getElementById("login-btn");
 const emptyLoginBtn = document.getElementById("empty-login-btn");
+const emptyImportBtn = document.getElementById("empty-import-btn");
+const emptyDownloadCodexBtn = document.getElementById("empty-download-codex-btn");
 const loginBanner = document.getElementById("login-banner");
 const loginCancelBtn = document.getElementById("login-cancel-btn");
 const toastEl = document.getElementById("toast");
 const addApiBtn = document.getElementById("add-api-btn");
+const downloadCodexBtn = document.getElementById("download-codex-btn");
 const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
 const apiFormEl = document.getElementById("api-form");
@@ -453,7 +456,10 @@ function setBusy(value) {
   refreshBtn.disabled = value;
   loginBtn.disabled = value;
   emptyLoginBtn.disabled = value;
+  emptyImportBtn.disabled = value;
+  emptyDownloadCodexBtn.disabled = value;
   addApiBtn.disabled = value;
+  downloadCodexBtn.disabled = value;
   importBtn.disabled = value;
   exportBtn.disabled = value;
   apiFormSaveBtn.disabled = value;
@@ -597,6 +603,15 @@ async function startBrowserLogin() {
 
 loginBtn.addEventListener("click", startBrowserLogin);
 emptyLoginBtn.addEventListener("click", startBrowserLogin);
+
+async function openCodexDownload() {
+  if (busy) return;
+  const result = await window.codexAuth.openCodexDownload();
+  if (!result.ok) showToast(result.error ?? t("toast.openCodexDownloadFailed"), "error");
+}
+
+downloadCodexBtn.addEventListener("click", openCodexDownload);
+emptyDownloadCodexBtn.addEventListener("click", openCodexDownload);
 
 loginCancelBtn.addEventListener("click", () => {
   window.codexAuth.loginCancel();
@@ -800,7 +815,7 @@ exportBtn.addEventListener("click", () => {
   runExportFlow();
 });
 
-importBtn.addEventListener("click", async () => {
+async function runImportFlow() {
   if (busy) return;
   const choice = await showChoice({
     title: t("confirm.importTitle"),
@@ -843,7 +858,10 @@ importBtn.addEventListener("click", async () => {
   }
   setBusy(false);
   await applyImportResult(result);
-});
+}
+
+importBtn.addEventListener("click", runImportFlow);
+emptyImportBtn.addEventListener("click", runImportFlow);
 
 langSelect.addEventListener("change", () => {
   I18N.set(langSelect.value);

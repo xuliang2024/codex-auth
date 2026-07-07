@@ -274,8 +274,8 @@ fn writeOptionLines(out: *std.Io.Writer, topic: HelpTopic) !void {
             try out.writeAll("  --base-url <url>           Provider endpoint, for example `https://codex.example.com`. Requires `--api`.\n");
             try out.writeAll("  --key <api-key>            API key for the provider. Requires `--api`.\n");
             try out.writeAll("  --name <name>              Optional provider name used in config.toml and as the account alias.\n");
-            try out.writeAll("  --model <model>            Optional model written to config.toml while this account is active.\n");
-            try out.writeAll("  --reasoning-effort <level> Optional reasoning effort written to config.toml while this account is active.\n");
+            try out.writeAll("  --model <model>            Model written to config.toml while this account is active (default: gpt-5.5).\n");
+            try out.writeAll("  --reasoning-effort <level> Reasoning effort written to config.toml while this account is active (default: medium).\n");
         },
         .import_auth => {
             try out.writeAll("  <path>           Import one auth file or every supported auth file in a directory.\n");
@@ -352,7 +352,7 @@ fn writeExampleLines(out: *std.Io.Writer, topic: HelpTopic) !void {
         .login => {
             try out.writeAll("  codex-auth login\n");
             try out.writeAll("  codex-auth login --device-auth\n");
-            try out.writeAll("  codex-auth login --api --base-url https://codex.example.com --key sk-xxxx --name myapi --model gpt-5.5\n");
+            try out.writeAll("  codex-auth login --api --base-url https://codex.example.com --key sk-xxxx --name myapi\n");
         },
         .import_auth => {
             try out.writeAll("  codex-auth import /path/to/auth.json --alias personal\n");

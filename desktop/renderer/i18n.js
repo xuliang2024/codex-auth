@@ -13,6 +13,8 @@ const I18N = (() => {
       "btn.addApi.tip": "Add an API provider account (custom endpoint + API key)",
       "btn.refresh": "Refresh Usage",
       "btn.refresh.tip": "Refresh usage from API",
+      "btn.downloadCodex": "Download Codex",
+      "btn.downloadCodex.tip": "Open the Codex download for this computer",
       "btn.import": "Import",
       "btn.import.tip": "Import accounts from a JSON export file or share link",
       "btn.export": "Export",
@@ -36,7 +38,11 @@ const I18N = (() => {
       "apiForm.save": "Add & Switch",
 
       "empty.title": "No accounts found",
-      "empty.hint": "Click <code>Add Account</code> to sign in with your browser and add your first account.",
+      "empty.hint": "Choose how you want to get started.",
+      "empty.importDesc": "Use this if you already have a JSON backup or share link.",
+      "empty.newAccount": "New Account",
+      "empty.newAccountDesc": "Use this for first-time setup. A browser sign-in will open.",
+      "empty.downloadCodexDesc": "Use this if Codex is not installed on this computer yet.",
 
       "summary.accountOne": "1 account",
       "summary.accountMany": "{count} accounts",
@@ -140,6 +146,7 @@ const I18N = (() => {
       "toast.exportShareCreated": "Share link created",
       "toast.exportShareCopied": "Share link copied",
       "toast.openLinkFailed": "Could not open this link",
+      "toast.openCodexDownloadFailed": "Could not open Codex download",
     },
     zh: {
       "app.title": "Codex 账户管家",
@@ -149,6 +156,8 @@ const I18N = (() => {
       "btn.addApi.tip": "添加 API 提供商账户（自定义接入点 + API 密钥）",
       "btn.refresh": "刷新用量",
       "btn.refresh.tip": "从 API 刷新用量",
+      "btn.downloadCodex": "下载 Codex",
+      "btn.downloadCodex.tip": "根据当前系统打开 Codex 下载地址",
       "btn.import": "导入",
       "btn.import.tip": "从 JSON 导出文件或分享链接导入账户",
       "btn.export": "导出",
@@ -172,7 +181,11 @@ const I18N = (() => {
       "apiForm.save": "添加并切换",
 
       "empty.title": "未找到账户",
-      "empty.hint": "点击「添加账户」通过浏览器登录，添加第一个账户。",
+      "empty.hint": "选择一种开始方式。",
+      "empty.importDesc": "已有 JSON 备份，或别人发来的分享链接时使用。",
+      "empty.newAccount": "新建账号",
+      "empty.newAccountDesc": "第一次使用时选择，会打开浏览器登录。",
+      "empty.downloadCodexDesc": "这台电脑还没有安装 Codex 时，先点这里下载。",
 
       "summary.accountOne": "1 个账户",
       "summary.accountMany": "{count} 个账户",
@@ -276,6 +289,7 @@ const I18N = (() => {
       "toast.exportShareCreated": "分享链接已创建",
       "toast.exportShareCopied": "分享链接已复制",
       "toast.openLinkFailed": "无法打开该链接",
+      "toast.openCodexDownloadFailed": "无法打开 Codex 下载地址",
     },
     ja: {
       "app.title": "Codex アカウント管理",
@@ -285,6 +299,8 @@ const I18N = (() => {
       "btn.addApi.tip": "API プロバイダーアカウントを追加（カスタムエンドポイント + API キー）",
       "btn.refresh": "使用量を更新",
       "btn.refresh.tip": "API から使用量を更新",
+      "btn.downloadCodex": "Codex をダウンロード",
+      "btn.downloadCodex.tip": "このコンピューター用の Codex ダウンロードを開く",
       "btn.import": "インポート",
       "btn.import.tip": "JSON エクスポートファイルまたは共有リンクからアカウントをインポート",
       "btn.export": "エクスポート",
@@ -308,7 +324,11 @@ const I18N = (() => {
       "apiForm.save": "追加して切替",
 
       "empty.title": "アカウントが見つかりません",
-      "empty.hint": "「アカウント追加」をクリックしてブラウザでサインインし、最初のアカウントを追加してください。",
+      "empty.hint": "開始方法を選択してください。",
+      "empty.importDesc": "JSON バックアップまたは共有リンクがある場合に使います。",
+      "empty.newAccount": "新規アカウント",
+      "empty.newAccountDesc": "初回設定に使います。ブラウザでサインインします。",
+      "empty.downloadCodexDesc": "このコンピューターに Codex が未インストールの場合に使います。",
 
       "summary.accountOne": "アカウント 1 件",
       "summary.accountMany": "アカウント {count} 件",
@@ -412,6 +432,7 @@ const I18N = (() => {
       "toast.exportShareCreated": "共有リンクを作成しました",
       "toast.exportShareCopied": "共有リンクをコピーしました",
       "toast.openLinkFailed": "このリンクを開けませんでした",
+      "toast.openCodexDownloadFailed": "Codex のダウンロードを開けませんでした",
     },
   };
 
