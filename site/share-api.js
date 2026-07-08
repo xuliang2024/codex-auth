@@ -4,8 +4,9 @@ const MAX_BODY_BYTES = 512 * 1024;
 const DEFAULT_TTL_DAYS = 7;
 const MAX_TTL_DAYS = 30;
 const MAX_NOTE_LENGTH = 200;
-const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260706-four-steps";
+const SHARE_STYLESHEET_HREF = "/styles.css?v=share-ui-20260707-faq-recovery-2";
 const SHARE_IMPORT_IMAGE_SRC = "/assets/import-share-link.png?v=20260706";
+const SHARE_TUTORIAL_VIDEO_SRC = "https://cdn-video.51sux.com/mcp-uploads/20260707/open-wakeup-0707-78c614388e4e.mp4";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -275,6 +276,33 @@ function renderSharePage(meta, origin) {
               </div>
             </li>
           </ol>
+          <section class="share-tutorial-video" aria-labelledby="share-tutorial-title">
+            <div class="share-tutorial-copy">
+              <p class="eyebrow">视频教材</p>
+              <h2 id="share-tutorial-title">跟着视频完成导入</h2>
+              <p>如果第一次使用客户端，可以先看完整操作演示，再复制本页导入链接。</p>
+            </div>
+            <video
+              class="share-tutorial-player"
+              src="${SHARE_TUTORIAL_VIDEO_SRC}"
+              controls
+              playsinline
+              preload="metadata"
+            >
+              当前浏览器无法播放视频，请复制链接打开：${SHARE_TUTORIAL_VIDEO_SRC}
+            </video>
+          </section>
+          <section class="share-faq" aria-labelledby="share-faq-title">
+            <p class="eyebrow">常见问题</p>
+            <h2 id="share-faq-title">切换账号后会话记录怎么找回？</h2>
+            <p>
+              如果切换账号后需要找回会话记录，请把下面这段内容发送给 Codex 聊天，让 Codex 查看恢复工具并协助恢复。
+            </p>
+            <pre class="share-faq-prompt"><code>git clone https://github.com/wimi321/codex-session-recovery-skill.git
+cd codex-session-recovery-skill
+python3 skills/codex-session-recovery/scripts/codex_session_recovery.py diagnose
+查看一下这个仓库，然后恢复一下我的会话记录</code></pre>
+          </section>
           <div class="share-warning">
             <strong>请谨慎保管此链接</strong>
             <p>

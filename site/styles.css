@@ -1339,6 +1339,87 @@ h3 {
   margin-top: 16px;
 }
 
+.share-tutorial-video {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(0, 168, 132, 0.22);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(0, 168, 132, 0.08), rgba(255, 255, 255, 0.9) 44%),
+    rgba(244, 248, 245, 0.78);
+}
+
+.share-tutorial-copy {
+  min-width: 0;
+}
+
+.share-tutorial-copy h2 {
+  margin-bottom: 8px;
+  font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  font-size: clamp(1.35rem, 2vw, 1.82rem);
+  line-height: 1.18;
+}
+
+.share-tutorial-copy p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.share-tutorial-player {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(16, 32, 28, 0.18);
+  border-radius: var(--radius);
+  background: var(--terminal);
+  box-shadow: 0 12px 32px rgba(16, 32, 28, 0.14);
+}
+
+.share-faq {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.share-faq h2 {
+  margin-bottom: 0;
+  font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  font-size: clamp(1.35rem, 2vw, 1.82rem);
+  line-height: 1.18;
+}
+
+.share-faq p {
+  max-width: 760px;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.share-faq-prompt {
+  overflow-x: auto;
+  margin: 4px 0 0;
+  padding: 16px;
+  border: 1px solid rgba(16, 32, 28, 0.16);
+  border-radius: var(--radius);
+  background: #0d211d;
+  color: #f2fff9;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.share-faq-prompt code {
+  font: inherit;
+}
+
 .share-actions-primary .share-warning {
   margin-top: 18px;
 }
@@ -1489,6 +1570,10 @@ h3 {
   .share-actions-primary .share-step-item {
     grid-template-columns: 44px minmax(0, 1fr);
     min-height: 0;
+  }
+
+  .share-tutorial-video {
+    grid-template-columns: 1fr;
   }
 
   .share-summary-status {

@@ -161,6 +161,13 @@ test("GET /share/{id} renders HTML summary without tokens", async () => {
   assert.match(html, /导入完成或切换账号后/);
   assert.match(html, /import-share-link\.png/);
   assert.match(html, /客户端链接导入示意图/);
+  assert.match(html, /视频教材/);
+  assert.match(html, /open-wakeup-0707-78c614388e4e\.mp4/);
+  assert.match(html, /常见问题/);
+  assert.match(html, /切换账号后会话记录怎么找回/);
+  assert.match(html, /codex-session-recovery-skill/);
+  assert.match(html, /codex_session_recovery\.py diagnose/);
+  assert.match(html, /查看一下这个仓库，然后恢复一下我的会话记录/);
 });
 
 test("expired share export returns 410", async () => {
