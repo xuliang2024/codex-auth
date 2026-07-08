@@ -109,6 +109,55 @@ fn isForeignModelProviderLine(raw_line: []const u8) bool {
     return std.mem.eql(u8, key, "model_provider");
 }
 
+fn tableHeaderNameOf(raw_line: []const u8) ?[]const u8 {
+    const line = std.mem.trim(u8, raw_line, " \t\r");
+    if (line.len == 0 or line[0] == '#') return null;
+    if (!std.mem.startsWith(u8, line, "[")) return null;
+
+    const is_array_table = std.mem.startsWith(u8, line, "[[");
+    const name_start: usize = if (is_array_table) 2 else 1;
+    const name_end = if (is_array_table)
+        (std.mem.indexOf(u8, line, "]]") orelse return null)
+    else
+        (std.mem.indexOfScalar(u8, line, ']') orelse return null);
+    const after_start = name_end + if (is_array_table) @as(usize, 2) else @as(usize, 1);
+    const after = std.mem.trim(u8, line[after_start..], " \t\r");
+    if (after.len > 0 and after[0] != '#') return null;
+    return std.mem.trim(u8, line[name_start..name_end], " \t");
+}
+
+fn tableNameMatchesProviderId(table_name: []const u8, provider_id: []const u8) bool {
+    var parts = std.mem.splitScalar(u8, table_name, '.');
+    const root = std.mem.trim(u8, parts.next() orelse return false, " \t");
+    const id = std.mem.trim(u8, parts.next() orelse return false, " \t");
+    if (parts.next() != null) return false;
+    return std.mem.eql(u8, root, "model_providers") and std.mem.eql(u8, id, provider_id);
+}
+
+fn hasModelProviderTable(content: []const u8, provider_id: []const u8) bool {
+    var it = std.mem.splitScalar(u8, content, '\n');
+    while (it.next()) |line| {
+        const table_name = tableHeaderNameOf(line) orelse continue;
+        if (tableNameMatchesProviderId(table_name, provider_id)) return true;
+    }
+    return false;
+}
+
+fn effectiveProviderIdAlloc(allocator: std.mem.Allocator, content: []const u8, provider_id: []const u8) ![]u8 {
+    if (!hasModelProviderTable(content, provider_id)) return try allocator.dupe(u8, provider_id);
+
+    const base = try std.fmt.allocPrint(allocator, "{s}-codex-auth", .{provider_id});
+    defer allocator.free(base);
+    if (!hasModelProviderTable(content, base)) return try allocator.dupe(u8, base);
+
+    var index: usize = 2;
+    while (true) : (index += 1) {
+        const candidate = try std.fmt.allocPrint(allocator, "{s}-{d}", .{ base, index });
+        if (!hasModelProviderTable(content, candidate)) return candidate;
+        allocator.free(candidate);
+    }
+}
+
 /// Re-enables lines previously commented out with `disabled_line_prefix`.
 pub fn restoreDisabledLinesAlloc(allocator: std.mem.Allocator, content: []const u8) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
@@ -191,10 +240,10 @@ fn writeTomlString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeAll("\"");
 }
 
-fn writeHeadBlock(writer: *std.Io.Writer, provider: *const ProviderConfig) !void {
+fn writeHeadBlock(writer: *std.Io.Writer, provider: *const ProviderConfig, provider_id: []const u8) !void {
     try writer.writeAll(head_begin_marker);
     try writer.writeAll("\nmodel_provider = ");
-    try writeTomlString(writer, provider.id);
+    try writeTomlString(writer, provider_id);
     if (provider.model) |model| {
         try writer.writeAll("\nmodel = ");
         try writeTomlString(writer, model);
@@ -210,11 +259,11 @@ fn writeHeadBlock(writer: *std.Io.Writer, provider: *const ProviderConfig) !void
     try writer.writeAll("\n");
 }
 
-fn writeTailBlock(writer: *std.Io.Writer, provider: *const ProviderConfig) !void {
+fn writeTailBlock(writer: *std.Io.Writer, provider: *const ProviderConfig, provider_id: []const u8) !void {
     try writer.writeAll(tail_begin_marker);
-    try writer.print("\n[model_providers.{s}]", .{provider.id});
+    try writer.print("\n[model_providers.{s}]", .{provider_id});
     try writer.writeAll("\nname = ");
-    try writeTomlString(writer, provider.id);
+    try writeTomlString(writer, provider_id);
     try writer.writeAll("\nbase_url = ");
     try writeTomlString(writer, provider.base_url);
     try writer.writeAll("\nwire_api = \"responses\"");
@@ -235,11 +284,13 @@ pub fn applyProviderBlocksAlloc(
     defer if (stripped_owned) |value| allocator.free(value);
     const user_content = try disableConflictingLinesAlloc(allocator, stripped_owned orelse content);
     defer allocator.free(user_content);
+    const provider_id = try effectiveProviderIdAlloc(allocator, user_content, provider.id);
+    defer allocator.free(provider_id);
 
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
 
-    try writeHeadBlock(&out.writer, provider);
+    try writeHeadBlock(&out.writer, provider, provider_id);
 
     const trimmed_user = std.mem.trim(u8, user_content, "\n");
     if (trimmed_user.len > 0) {
@@ -249,7 +300,7 @@ pub fn applyProviderBlocksAlloc(
     }
 
     try out.writer.writeAll("\n");
-    try writeTailBlock(&out.writer, provider);
+    try writeTailBlock(&out.writer, provider, provider_id);
 
     return try out.toOwnedSlice();
 }

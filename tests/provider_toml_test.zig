@@ -97,6 +97,38 @@ test "applyProviderBlocksAlloc comments out conflicting keys and remove restores
     try std.testing.expectEqualStrings(user_config, removed);
 }
 
+test "applyProviderBlocksAlloc avoids existing provider table conflicts" {
+    const gpa = std.testing.allocator;
+    var provider = try testProvider(gpa);
+    defer registry.freeProviderConfig(gpa, &provider);
+
+    const user_config =
+        \\[model_providers.apiz]
+        \\name = "user apiz"
+        \\base_url = "https://user.example.com"
+        \\
+        \\[model_providers.apiz-codex-auth]
+        \\name = "user reserved"
+        \\base_url = "https://reserved.example.com"
+        \\
+    ;
+    const applied = try provider_toml.applyProviderBlocksAlloc(gpa, user_config, &provider);
+    defer gpa.free(applied);
+
+    try std.testing.expect(std.mem.indexOf(u8, applied, "model_provider = \"apiz-codex-auth-2\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, applied, "[model_providers.apiz-codex-auth-2]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, applied, "[model_providers.apiz]\nname = \"user apiz\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, applied, "[model_providers.apiz-codex-auth]\nname = \"user reserved\"") != null);
+
+    const second = try provider_toml.applyProviderBlocksAlloc(gpa, applied, &provider);
+    defer gpa.free(second);
+    try std.testing.expectEqualStrings(applied, second);
+
+    const removed = (try provider_toml.removeProviderBlocksAlloc(gpa, applied)).?;
+    defer gpa.free(removed);
+    try std.testing.expectEqualStrings(user_config, removed);
+}
+
 test "removeProviderBlocksAlloc quarantines unmanaged model_provider overrides" {
     const gpa = std.testing.allocator;
 
