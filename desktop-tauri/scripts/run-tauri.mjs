@@ -26,13 +26,14 @@ if (process.platform === "darwin") {
   }
 }
 
-const executable = path.join(
+const cliEntry = path.join(
   projectRoot,
   "node_modules",
-  ".bin",
-  process.platform === "win32" ? "tauri.cmd" : "tauri",
+  "@tauri-apps",
+  "cli",
+  "tauri.js",
 );
-const result = spawnSync(executable, args, {
+const result = spawnSync(process.execPath, [cliEntry, ...args], {
   env,
   stdio: "inherit",
   shell: false,
