@@ -8,13 +8,16 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const readJson = (relativePath) => JSON.parse(
   fs.readFileSync(path.join(projectRoot, relativePath), "utf8"),
 );
+const readText = (relativePath) => fs
+  .readFileSync(path.join(projectRoot, relativePath), "utf8")
+  .replace(/\r\n?/g, "\n");
 
 test("Tauri package versions stay aligned", () => {
   const packageJson = readJson("package.json");
   const packageLock = readJson("package-lock.json");
   const tauriConfig = readJson("src-tauri/tauri.conf.json");
-  const cargoToml = fs.readFileSync(path.join(projectRoot, "src-tauri/Cargo.toml"), "utf8");
-  const cargoLock = fs.readFileSync(path.join(projectRoot, "src-tauri/Cargo.lock"), "utf8");
+  const cargoToml = readText("src-tauri/Cargo.toml");
+  const cargoLock = readText("src-tauri/Cargo.lock");
   const cargoVersion = cargoToml.match(/^version = "([^"]+)"$/m)?.[1];
   const lockedCargoVersion = cargoLock.match(
     /\[\[package\]\]\nname = "codex-auth-desktop-tauri"\nversion = "([^"]+)"/,
