@@ -11,7 +11,9 @@ const runner = path.join(
   "run-macos-dev-app.mjs",
 );
 
-test("macOS development runner launches through the product display name", () => {
+test("macOS development runner launches through the product display name", {
+  skip: process.platform !== "darwin",
+}, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-auth-runner-"));
   const executable = path.join(directory, "test-executable");
 
