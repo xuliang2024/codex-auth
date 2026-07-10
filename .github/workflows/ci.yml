@@ -125,6 +125,12 @@ jobs:
         working-directory: desktop-tauri
         run: npm run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
+      - name: Smoke test NSIS installer
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        working-directory: desktop-tauri
+        run: ./scripts/smoke-nsis.ps1 -Target "${{ matrix.target }}" -TargetDirectory "${{ env.CARGO_TARGET_DIR }}"
+
       - name: Upload installer
         uses: actions/upload-artifact@v7
         with:
