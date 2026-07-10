@@ -1,0 +1,20 @@
+{
+  "name": "codex-auth-desktop-tauri",
+  "version": "0.2.1",
+  "description": "Tauri desktop account manager for Codex",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "node scripts/prepare-frontend.mjs",
+    "test": "npm run test:bridge",
+    "test:bridge": "node --test scripts/*.test.mjs",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "start": "node scripts/run-tauri.mjs dev",
+    "build": "node scripts/run-tauri.mjs build",
+    "build:app": "node scripts/run-tauri.mjs build --bundles app",
+    "build:dmg": "node scripts/run-tauri.mjs build --bundles dmg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.0"
+  }
+}
