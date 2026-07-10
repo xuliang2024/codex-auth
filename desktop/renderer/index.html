@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="titlebar">
-    <div class="titlebar-drag"></div>
+  <header class="titlebar" data-tauri-drag-region="deep">
+    <div class="titlebar-drag" data-tauri-drag-region></div>
     <div class="header-content">
       <div class="header-left">
         <img class="app-mark" src="../build/icon.svg" alt="" aria-hidden="true" />
@@ -261,6 +261,7 @@
   </div>
 
   <script src="i18n.js"></script>
+  <script src="runtime-bridge.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
