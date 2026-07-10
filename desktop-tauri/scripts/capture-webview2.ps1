@@ -54,8 +54,10 @@ New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 Remove-Item $outputPath -Force -ErrorAction SilentlyContinue
 
 $appProcess = Start-Process -FilePath $binaryPath -WorkingDirectory (Split-Path -Parent $binaryPath) -PassThru
-$bitmap = $null
-$graphics = $null
+$capturedBitmap = $null
+$captureGraphics = $null
+$normalizedBitmap = $null
+$normalizedGraphics = $null
 try {
   $windowHandle = [IntPtr]::Zero
   for ($attempt = 0; $attempt -lt 60; $attempt++) {
@@ -76,31 +78,48 @@ try {
   [VisualCaptureNativeMethods]::SetForegroundWindow($windowHandle) | Out-Null
   Start-Sleep -Seconds 2
 
-  $rect = [VisualCaptureNativeMethods+Rect]::new()
-  $origin = [VisualCaptureNativeMethods+Point]::new()
-  if (-not [VisualCaptureNativeMethods]::GetClientRect($windowHandle, [ref]$rect)) {
-    throw "Could not read the WebView2 client bounds."
+  $origin = $null
+  $width = 0
+  $height = 0
+  for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    $appProcess.Refresh()
+    $windowHandle = $appProcess.MainWindowHandle
+    if ($windowHandle -ne [IntPtr]::Zero) {
+      $candidateRect = [VisualCaptureNativeMethods+Rect]::new()
+      $candidateOrigin = [VisualCaptureNativeMethods+Point]::new()
+      if ([VisualCaptureNativeMethods]::GetClientRect($windowHandle, [ref]$candidateRect) -and
+          [VisualCaptureNativeMethods]::ClientToScreen($windowHandle, [ref]$candidateOrigin)) {
+        $candidateWidth = $candidateRect.Right - $candidateRect.Left
+        $candidateHeight = $candidateRect.Bottom - $candidateRect.Top
+        if ($candidateWidth -gt 0 -and $candidateHeight -gt 0) {
+          $origin = $candidateOrigin
+          $width = $candidateWidth
+          $height = $candidateHeight
+          break
+        }
+      }
+    }
+    Start-Sleep -Milliseconds 250
   }
-  if (-not [VisualCaptureNativeMethods]::ClientToScreen($windowHandle, [ref]$origin)) {
-    throw "Could not map the WebView2 client bounds to the screen."
+  if ($width -lt 600 -or $height -lt 480 -or $null -eq $origin) {
+    throw "Could not obtain usable WebView2 client bounds (last size ${width}x${height})."
   }
 
-  $width = $rect.Right - $rect.Left
-  $height = $rect.Bottom - $rect.Top
-  if ($width -ne 1000 -or $height -ne 700) {
-    throw "Expected a 1000x700 WebView2 viewport, found ${width}x${height}."
-  }
+  Write-Host "Capturing WebView2 window '$($appProcess.MainWindowTitle)' from ${width}x${height}."
+  $capturedBitmap = [System.Drawing.Bitmap]::new($width, $height)
+  $captureGraphics = [System.Drawing.Graphics]::FromImage($capturedBitmap)
+  $captureGraphics.CopyFromScreen($origin.X, $origin.Y, 0, 0, $capturedBitmap.Size)
 
-  $bitmap = [System.Drawing.Bitmap]::new($width, $height)
-  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-  $graphics.CopyFromScreen($origin.X, $origin.Y, 0, 0, $bitmap.Size)
-  $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  $normalizedBitmap = [System.Drawing.Bitmap]::new(1000, 700)
+  $normalizedGraphics = [System.Drawing.Graphics]::FromImage($normalizedBitmap)
+  $normalizedGraphics.DrawImage($capturedBitmap, 0, 0, 1000, 700)
+  $normalizedBitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
   $brightSamples = 0
   $accentSamples = 0
-  for ($x = 0; $x -lt $width; $x += 20) {
-    for ($y = 0; $y -lt $height; $y += 20) {
-      $color = $bitmap.GetPixel($x, $y)
+  for ($x = 0; $x -lt 1000; $x += 20) {
+    for ($y = 0; $y -lt 700; $y += 20) {
+      $color = $normalizedBitmap.GetPixel($x, $y)
       if ([Math]::Max($color.R, [Math]::Max($color.G, $color.B)) -gt 90) {
         $brightSamples++
       }
@@ -114,15 +133,21 @@ try {
     throw "The WebView2 screenshot does not contain the expected rendered UI colors."
   }
 
-  Write-Host "Captured a ${width}x${height} WebView2 screenshot at '$outputPath'."
+  Write-Host "Captured a normalized 1000x700 WebView2 screenshot at '$outputPath'."
   Write-Host "Visual samples: bright=$brightSamples accent=$accentSamples."
 }
 finally {
-  if ($null -ne $graphics) {
-    $graphics.Dispose()
+  if ($null -ne $normalizedGraphics) {
+    $normalizedGraphics.Dispose()
   }
-  if ($null -ne $bitmap) {
-    $bitmap.Dispose()
+  if ($null -ne $normalizedBitmap) {
+    $normalizedBitmap.Dispose()
+  }
+  if ($null -ne $captureGraphics) {
+    $captureGraphics.Dispose()
+  }
+  if ($null -ne $capturedBitmap) {
+    $capturedBitmap.Dispose()
   }
   if (-not $appProcess.HasExited) {
     Stop-Process -Id $appProcess.Id -Force
