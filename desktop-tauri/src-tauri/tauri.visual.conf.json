@@ -1,0 +1,32 @@
+{
+  "productName": "Accounts for Codex Visual Test",
+  "identifier": "com.loongphy.codex-auth-desktop.visual-test",
+  "build": {
+    "beforeDevCommand": "node scripts/prepare-visual-frontend.mjs",
+    "beforeBuildCommand": "node scripts/prepare-visual-frontend.mjs",
+    "frontendDist": "../visual-frontend-dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Accounts for Codex Visual Test",
+        "url": "renderer/index.html",
+        "width": 1000,
+        "height": 700,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "maxWidth": 1000,
+        "maxHeight": 700,
+        "center": true,
+        "decorations": false,
+        "resizable": false,
+        "shadow": false,
+        "backgroundColor": "#0d1017"
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

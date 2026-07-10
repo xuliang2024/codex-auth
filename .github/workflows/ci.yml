@@ -140,3 +140,27 @@ jobs:
             .tauri-target/${{ matrix.target }}/release/bundle/nsis/*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Build WebView2 visual fixture
+        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+        working-directory: desktop-tauri
+        run: npm run build:visual -- --target ${{ matrix.target }}
+
+      - name: Capture WebView2 visual evidence
+        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+        shell: pwsh
+        working-directory: desktop-tauri
+        run: >-
+          ./scripts/capture-webview2.ps1
+          -TargetDirectory "${{ env.CARGO_TARGET_DIR }}"
+          -Target "${{ matrix.target }}"
+          -Output "${{ github.workspace }}/.tauri-visual/webview2.png"
+
+      - name: Upload WebView2 visual evidence
+        if: ${{ always() && matrix.target == 'x86_64-pc-windows-msvc' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-visual-webview2
+          path: .tauri-visual/webview2.png
+          if-no-files-found: warn
+          retention-days: 7

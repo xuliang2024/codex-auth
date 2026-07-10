@@ -11,6 +11,7 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "start": "node scripts/run-tauri.mjs dev",
     "build": "node scripts/run-tauri.mjs build",
+    "build:visual": "node scripts/run-tauri.mjs build --config src-tauri/tauri.visual.conf.json",
     "build:app": "node scripts/run-tauri.mjs build --bundles app",
     "build:dmg": "node scripts/run-tauri.mjs build --bundles dmg"
   },
