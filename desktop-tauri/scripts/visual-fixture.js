@@ -93,7 +93,7 @@
 
   window.codexAuth = {
     platform,
-    getAppVersion: async () => "0.2.1",
+    getAppVersion: async () => "0.2.2",
     getRegistry: async () => registryResult(),
     getAnnouncements: async () => ({ ok: true, announcements: [] }),
     openAnnouncementUrl: unsupported,
@@ -124,7 +124,7 @@
 
   const markReady = () => {
     if (document.querySelectorAll(".account-card").length !== 3) return;
-    if (document.getElementById("app-version")?.textContent !== "v0.2.1") return;
+    if (document.getElementById("app-version")?.textContent !== "v0.2.2") return;
     document.documentElement.dataset.visualReady = "true";
     document.title = "Accounts for Codex Visual Test Ready";
     observer.disconnect();
