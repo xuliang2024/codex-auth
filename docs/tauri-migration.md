@@ -109,17 +109,19 @@ already been approved.
 
 ## Acceptance Gates Before Replacing Electron
 
-- Run live ChatGPT OAuth through direct, HTTP proxy, SOCKS proxy, and TUN
+- [ ] Run live ChatGPT OAuth through direct, HTTP proxy, SOCKS proxy, and TUN
   network configurations.
-- Test real provider endpoints and token refresh behavior.
-- Verify arm64 and x64 macOS builds on macOS 12 or newer.
-- Build and test Windows x64 and arm64 NSIS installers on Windows CI.
-- Run visual regression checks on WKWebView and WebView2.
-- Complete Developer ID signing, Apple notarization, stapling, and Gatekeeper
+- [ ] Test real provider endpoints and token refresh behavior.
+- [x] Verify arm64 and x64 macOS builds on macOS 12 or newer.
+- [x] Build, install, launch, and uninstall Windows x64 and arm64 NSIS
+  installers on Windows CI.
+- [x] Run visual regression checks on WKWebView and WebView2.
+- [x] Validate Developer ID signing, Apple notarization, stapling, and Gatekeeper
   validation for both macOS architectures.
-- Decide whether to keep the Rust registry implementation or replace it with a
-  structured Zig sidecar API to avoid maintaining the same rules twice.
-- Update public download links only after signed artifacts exist.
+- [x] Keep the Rust registry implementation for desktop 0.2.x instead of
+  introducing a release-stage Zig sidecar. See
+  [ADR 0001](decisions/0001-tauri-registry-runtime.md).
+- [ ] Update public download links only after signed artifacts exist.
 
 Do not remove the Electron app or change the production download page before
 all gates pass.

@@ -171,8 +171,20 @@ pub fn active_auth_path(codex_home: &Path) -> PathBuf {
     codex_home.join("auth.json")
 }
 
+fn key_needs_filename_encoding(key: &str) -> bool {
+    key.is_empty()
+        || matches!(key, "." | "..")
+        || !key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
 pub fn account_auth_path(codex_home: &Path, account_key: &str) -> PathBuf {
-    let file_key = URL_SAFE_NO_PAD.encode(account_key.as_bytes());
+    let file_key = if key_needs_filename_encoding(account_key) {
+        URL_SAFE_NO_PAD.encode(account_key.as_bytes())
+    } else {
+        account_key.to_string()
+    };
     accounts_dir(codex_home).join(format!("{file_key}.auth.json"))
 }
 
@@ -271,8 +283,19 @@ fn backup_file_if_changed(
 
 pub fn load_registry(codex_home: &Path) -> Result<Registry, String> {
     match fs::read_to_string(registry_path(codex_home)) {
-        Ok(content) => serde_json::from_str::<Registry>(&content)
-            .map_err(|error| format!("Failed to parse registry.json: {error}")),
+        Ok(content) => {
+            let value = serde_json::from_str::<Value>(&content)
+                .map_err(|error| format!("Failed to parse registry.json: {error}"))?;
+            if let Some(version) = value.get("schema_version").and_then(Value::as_u64) {
+                if version > u64::from(CURRENT_SCHEMA_VERSION) {
+                    return Err(format!(
+                        "Registry schema version {version} is not supported by this app (supports up to {CURRENT_SCHEMA_VERSION})."
+                    ));
+                }
+            }
+            serde_json::from_value::<Registry>(value)
+                .map_err(|error| format!("Failed to parse registry.json: {error}"))
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Registry::default()),
         Err(error) => Err(format!("Failed to read registry.json: {error}")),
     }
@@ -1277,7 +1300,12 @@ pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
     if incoming.is_empty() {
         return json!({ "ok": false, "error": "The export file contains no accounts." });
     }
-    let mut registry = load_registry(codex_home).unwrap_or_default();
+    let mut registry = match load_registry(codex_home) {
+        Ok(registry) => registry,
+        Err(error) => {
+            return json!({ "ok": false, "error": format!("Failed to load registry: {error}") })
+        }
+    };
     let auths = payload
         .get("auths")
         .and_then(Value::as_object)
@@ -1452,6 +1480,54 @@ mod tests {
             provider_kind: String::new(),
             reasoning_effort: ReasoningEffort::Missing,
         }
+    }
+
+    #[test]
+    fn snapshot_paths_match_the_zig_filename_contract() {
+        let home = Path::new("codex-home");
+        assert_eq!(
+            account_auth_path(home, "safe-key_1.2"),
+            home.join("accounts/safe-key_1.2.auth.json")
+        );
+        assert_eq!(
+            account_auth_path(home, "user::account"),
+            home.join("accounts/dXNlcjo6YWNjb3VudA.auth.json")
+        );
+        assert_eq!(
+            account_auth_path(home, "."),
+            home.join("accounts/Lg.auth.json")
+        );
+    }
+
+    #[test]
+    fn future_registry_schema_is_rejected_without_writes() {
+        let home = temporary_home("future-schema");
+        ensure_accounts_dir(&home).unwrap();
+        let original = "{\n  \"schema_version\": 999,\n  \"accounts\": []\n}\n";
+        fs::write(registry_path(&home), original).unwrap();
+
+        let error = load_registry(&home).unwrap_err();
+        assert!(error.contains("schema version 999"));
+
+        let payload = json!({
+            "type": "codex-auth-accounts",
+            "version": 1,
+            "registry": {
+                "accounts": [{ "account_key": "safe-key" }]
+            },
+            "auths": {
+                "safe-key": { "OPENAI_API_KEY": "sk-test" }
+            }
+        });
+        let result = import_payload(&home, payload);
+        assert_eq!(result.get("ok").and_then(Value::as_bool), Some(false));
+        assert!(result
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|message| message.contains("schema version 999")));
+        assert_eq!(fs::read_to_string(registry_path(&home)).unwrap(), original);
+        assert!(!account_auth_path(&home, "safe-key").exists());
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]
