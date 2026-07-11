@@ -44,13 +44,13 @@ pub struct Registry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub account_key: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_default")]
     pub chatgpt_account_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_default")]
     pub chatgpt_user_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_default")]
     pub email: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_default")]
     pub alias: String,
     #[serde(default)]
     pub account_name: Option<String>,
@@ -78,7 +78,7 @@ pub struct Account {
 pub struct Provider {
     pub id: String,
     pub base_url: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_default")]
     pub model: String,
     #[serde(default)]
     pub model_reasoning_effort: Option<String>,
@@ -118,6 +118,13 @@ pub enum ReasoningEffort {
     Missing,
     Null,
     Value(String),
+}
+
+fn deserialize_string_or_default<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 fn deserialize_reasoning_effort<'de, D>(deserializer: D) -> Result<ReasoningEffort, D::Error>
@@ -217,6 +224,14 @@ pub fn write_private_file(path: &Path, content: impl AsRef<[u8]>) -> io::Result<
     set_mode(path, 0o600)
 }
 
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 fn backup_timestamp() -> String {
     Local::now().format("%Y%m%d-%H%M%S").to_string()
 }
@@ -281,21 +296,27 @@ fn backup_file_if_changed(
     Ok(())
 }
 
+fn parse_registry_content(content: &str) -> Result<Registry, String> {
+    let value = serde_json::from_str::<Value>(content).map_err(|error| error.to_string())?;
+    if let Some(version) = value.get("schema_version").and_then(Value::as_u64) {
+        if version > u64::from(CURRENT_SCHEMA_VERSION) {
+            return Err(format!(
+                "Registry schema version {version} is not supported by this app (supports up to {CURRENT_SCHEMA_VERSION})."
+            ));
+        }
+    }
+    serde_json::from_value::<Registry>(value).map_err(|error| error.to_string())
+}
+
 pub fn load_registry(codex_home: &Path) -> Result<Registry, String> {
     match fs::read_to_string(registry_path(codex_home)) {
-        Ok(content) => {
-            let value = serde_json::from_str::<Value>(&content)
-                .map_err(|error| format!("Failed to parse registry.json: {error}"))?;
-            if let Some(version) = value.get("schema_version").and_then(Value::as_u64) {
-                if version > u64::from(CURRENT_SCHEMA_VERSION) {
-                    return Err(format!(
-                        "Registry schema version {version} is not supported by this app (supports up to {CURRENT_SCHEMA_VERSION})."
-                    ));
-                }
+        Ok(content) => parse_registry_content(&content).map_err(|error| {
+            if error.starts_with("Registry schema version ") {
+                error
+            } else {
+                format!("Failed to parse registry.json: {error}")
             }
-            serde_json::from_value::<Registry>(value)
-                .map_err(|error| format!("Failed to parse registry.json: {error}"))
-        }
+        }),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Registry::default()),
         Err(error) => Err(format!("Failed to read registry.json: {error}")),
     }
@@ -306,6 +327,116 @@ pub fn registry_result(codex_home: &Path) -> Value {
         Ok(registry) => json!({ "ok": true, "data": registry }),
         Err(error) => json!({ "ok": false, "error": error }),
     }
+}
+
+fn merge_chatgpt_auth(registry: &mut Registry, auth: &Value) -> Option<(String, bool)> {
+    let identity = parse_chatgpt_identity(auth)?;
+    let key = identity.record_key.clone();
+    let mut changed = false;
+    if let Some(index) = find_account_index(registry, &key) {
+        let account = &mut registry.accounts[index];
+        if account.chatgpt_account_id.is_empty() {
+            account.chatgpt_account_id = identity.account_id;
+            changed = true;
+        }
+        if account.chatgpt_user_id.is_empty() {
+            account.chatgpt_user_id = identity.user_id;
+            changed = true;
+        }
+        if account.email.is_empty() {
+            if let Some(email) = identity.email {
+                account.email = email;
+                changed = true;
+            }
+        }
+        if account.plan.is_none() && identity.plan.is_some() {
+            account.plan = identity.plan;
+            changed = true;
+        }
+        if account.auth_mode.is_none() {
+            account.auth_mode = Some("chatgpt".to_string());
+            changed = true;
+        }
+    } else {
+        registry.accounts.push(Account {
+            chatgpt_account_id: identity.account_id,
+            chatgpt_user_id: identity.user_id,
+            email: identity.email.unwrap_or_default(),
+            plan: identity.plan,
+            ..base_account(key.clone(), "chatgpt", None)
+        });
+        changed = true;
+    }
+    Some((key, changed))
+}
+
+fn recover_active_chatgpt_account(codex_home: &Path, registry: &mut Registry) -> bool {
+    let mut changed = false;
+    if let Some(auth) = read_auth_value(&active_auth_path(codex_home)) {
+        if let Some((active_key, merged)) = merge_chatgpt_auth(registry, &auth) {
+            changed |= merged;
+            if registry.active_account_key.as_deref() != Some(active_key.as_str()) {
+                set_active_account_key(registry, &active_key, false);
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn latest_valid_registry_backup(codex_home: &Path) -> Option<Registry> {
+    let mut backups = fs::read_dir(accounts_dir(codex_home))
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("registry.json.bak.") {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, entry.path()))
+        })
+        .collect::<Vec<_>>();
+    backups.sort_by(|left, right| right.0.cmp(&left.0));
+    backups.into_iter().find_map(|(_, path)| {
+        let content = fs::read_to_string(path).ok()?;
+        parse_registry_content(&content).ok()
+    })
+}
+
+fn load_registry_with_repair(codex_home: &Path) -> Result<(Registry, bool), String> {
+    let (mut registry, restored_backup) = match load_registry(codex_home) {
+        Ok(registry) => (registry, false),
+        Err(error) if error.starts_with("Failed to parse registry.json:") => {
+            let path = registry_path(codex_home);
+            backup_file_if_changed(codex_home, &path, "registry.json", None).map_err(
+                |backup_error| {
+                    format!("{error}. The damaged registry could not be backed up: {backup_error}")
+                },
+            )?;
+            let registry = latest_valid_registry_backup(codex_home).ok_or_else(|| {
+                format!(
+                    "{error}. The damaged registry was backed up, but no valid registry backup was available. The original account index was not replaced."
+                )
+            })?;
+            (registry, true)
+        }
+        Err(error) => return Err(error),
+    };
+    let recovered_active = recover_active_chatgpt_account(codex_home, &mut registry);
+    Ok((registry, restored_backup || recovered_active))
+}
+
+fn load_registry_for_update(codex_home: &Path) -> Result<Registry, String> {
+    load_registry_with_repair(codex_home).map(|(registry, _)| registry)
+}
+
+pub fn repair_registry_from_auth_files(codex_home: &Path) -> Result<Registry, String> {
+    let (mut registry, changed) = load_registry_with_repair(codex_home)?;
+    if changed {
+        save_registry(codex_home, &mut registry)?;
+    }
+    Ok(registry)
 }
 
 pub fn save_registry(codex_home: &Path, registry: &mut Registry) -> Result<(), String> {
@@ -911,7 +1042,7 @@ fn activate_account(
 }
 
 pub fn switch_account(codex_home: &Path, account_key: &str) -> Result<Registry, String> {
-    let mut registry = load_registry(codex_home)?;
+    let mut registry = load_registry_for_update(codex_home)?;
     activate_account(codex_home, &mut registry, account_key)?;
     save_registry(codex_home, &mut registry)?;
     Ok(registry)
@@ -960,7 +1091,7 @@ fn best_remaining_key(registry: &Registry, removed_key: &str) -> Option<String> 
 }
 
 pub fn remove_account(codex_home: &Path, account_key: &str) -> Result<Registry, String> {
-    let mut registry = load_registry(codex_home)?;
+    let mut registry = load_registry_for_update(codex_home)?;
     let index = find_account_index(&registry, account_key)
         .ok_or_else(|| "Account not found in registry.".to_string())?;
     let active_removed = registry.active_account_key.as_deref() == Some(account_key);
@@ -991,10 +1122,12 @@ pub fn remove_account(codex_home: &Path, account_key: &str) -> Result<Registry, 
     if registry.previous_active_account_key.as_deref() == Some(account_key) {
         registry.previous_active_account_key = None;
     }
-    let _ = fs::remove_file(account_auth_path(codex_home, account_key));
+    remove_file_if_exists(&account_auth_path(codex_home, account_key))
+        .map_err(|error| format!("Failed to remove account credentials: {error}"))?;
     registry.accounts.remove(index);
     if registry.accounts.is_empty() {
-        let _ = fs::remove_file(active_auth_path(codex_home));
+        remove_file_if_exists(&active_auth_path(codex_home))
+            .map_err(|error| format!("Failed to remove active credentials: {error}"))?;
     }
     save_registry(codex_home, &mut registry)?;
     Ok(registry)
@@ -1093,7 +1226,7 @@ pub fn persist_chatgpt_login(
     let mut serialized = serde_json::to_string_pretty(&auth).map_err(|error| error.to_string())?;
     serialized.push('\n');
 
-    let mut registry = load_registry(codex_home)?;
+    let mut registry = load_registry_for_update(codex_home)?;
     ensure_accounts_dir(codex_home).map_err(|error| error.to_string())?;
     let active_path = active_auth_path(codex_home);
     backup_file_if_changed(codex_home, &active_path, "auth.json", Some(&serialized))
@@ -1187,7 +1320,7 @@ pub fn add_provider_account(
     write_private_file(&account_auth_path(codex_home, &record_key), auth)
         .map_err(|error| error.to_string())?;
 
-    let mut registry = load_registry(codex_home)?;
+    let mut registry = load_registry_for_update(codex_home)?;
     upsert_account(
         &mut registry,
         Account {
@@ -1300,7 +1433,7 @@ pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
     if incoming.is_empty() {
         return json!({ "ok": false, "error": "The export file contains no accounts." });
     }
-    let mut registry = match load_registry(codex_home) {
+    let mut registry = match load_registry_for_update(codex_home) {
         Ok(registry) => registry,
         Err(error) => {
             return json!({ "ok": false, "error": format!("Failed to load registry: {error}") })
@@ -1471,6 +1604,19 @@ mod tests {
         format!("{header}.{payload}.")
     }
 
+    fn chatgpt_auth(email: &str, user_id: &str, account_id: &str) -> Value {
+        json!({
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "id_token": fake_id_token(email, user_id, account_id),
+                "access_token": "access-token",
+                "refresh_token": "refresh-token",
+                "account_id": account_id
+            }
+        })
+    }
+
     fn provider_options(name: &str, key: &str) -> AddProviderOptions {
         AddProviderOptions {
             base_url: format!("https://{name}.example.com/v1/responses"),
@@ -1527,6 +1673,163 @@ mod tests {
             .is_some_and(|message| message.contains("schema version 999")));
         assert_eq!(fs::read_to_string(registry_path(&home)).unwrap(), original);
         assert!(!account_auth_path(&home, "safe-key").exists());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn malformed_registry_without_a_valid_backup_is_preserved() {
+        let home = temporary_home("malformed-no-backup");
+        ensure_accounts_dir(&home).unwrap();
+        let malformed = "{ invalid registry";
+        fs::write(registry_path(&home), malformed).unwrap();
+
+        let token = fake_id_token("repair@example.com", "repair-user", "repair-account");
+        let error =
+            persist_chatgpt_login(&home, token, "access-token".into(), "refresh-token".into())
+                .unwrap_err();
+
+        assert!(error.contains("no valid registry backup"));
+        assert_eq!(fs::read_to_string(registry_path(&home)).unwrap(), malformed);
+        assert!(!account_auth_path(&home, "repair-user::repair-account").exists());
+        assert!(fs::read_dir(accounts_dir(&home))
+            .unwrap()
+            .flatten()
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("registry.json.bak.")
+                    && fs::read_to_string(entry.path()).ok().as_deref() == Some(malformed)
+            }));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn valid_backup_repairs_malformed_registry_without_losing_provider_accounts() {
+        let home = temporary_home("malformed-valid-backup");
+        let mut original =
+            add_provider_account(&home, provider_options("preserved", "sk-preserved")).unwrap();
+        original.accounts[0].alias = "Preserved".into();
+        save_registry(&home, &mut original).unwrap();
+        let malformed = "{ invalid registry";
+        fs::write(registry_path(&home), malformed).unwrap();
+
+        let token = fake_id_token("repair@example.com", "repair-user", "repair-account");
+        let (registry, _) =
+            persist_chatgpt_login(&home, token, "access-token".into(), "refresh-token".into())
+                .unwrap();
+
+        assert_eq!(registry.accounts.len(), 2);
+        assert_eq!(
+            registry.active_account_key.as_deref(),
+            Some("repair-user::repair-account")
+        );
+        assert_eq!(
+            registry
+                .accounts
+                .iter()
+                .filter(|account| account.provider.is_some())
+                .count(),
+            1
+        );
+        assert!(fs::read_dir(accounts_dir(&home))
+            .unwrap()
+            .flatten()
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("registry.json.bak.")
+                    && fs::read_to_string(entry.path()).ok().as_deref() == Some(malformed)
+            }));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn startup_repair_recovers_an_authorized_account_from_auth_json() {
+        let home = temporary_home("startup-repair");
+        let auth = chatgpt_auth("existing@example.com", "existing-user", "existing-account");
+        write_private_file(
+            &active_auth_path(&home),
+            serde_json::to_vec_pretty(&auth).unwrap(),
+        )
+        .unwrap();
+
+        let repaired = repair_registry_from_auth_files(&home).unwrap();
+
+        assert_eq!(repaired.accounts.len(), 1);
+        assert_eq!(
+            repaired.active_account_key.as_deref(),
+            Some("existing-user::existing-account")
+        );
+        assert_eq!(repaired.accounts[0].email, "existing@example.com");
+        assert_eq!(load_registry(&home).unwrap().accounts.len(), 1);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn startup_repair_merges_active_auth_into_nonempty_registry() {
+        let home = temporary_home("startup-merge");
+        let existing =
+            add_provider_account(&home, provider_options("existing", "sk-existing")).unwrap();
+        let auth = chatgpt_auth("orphan@example.com", "orphan-user", "orphan-account");
+        write_private_file(
+            &active_auth_path(&home),
+            serde_json::to_vec_pretty(&auth).unwrap(),
+        )
+        .unwrap();
+
+        let repaired = repair_registry_from_auth_files(&home).unwrap();
+
+        assert_eq!(existing.accounts.len(), 1);
+        assert_eq!(repaired.accounts.len(), 2);
+        assert!(repaired
+            .accounts
+            .iter()
+            .any(|account| account.account_key == "orphan-user::orphan-account"));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn import_accepts_null_account_and_provider_string_metadata() {
+        let home = temporary_home("null-import");
+        let payload = json!({
+            "type": "codex-auth-accounts",
+            "version": 1,
+            "registry": {
+                "accounts": [{
+                    "account_key": "imported-account",
+                    "chatgpt_account_id": null,
+                    "chatgpt_user_id": null,
+                    "email": null,
+                    "alias": null,
+                    "auth_mode": "provider",
+                    "provider": {
+                        "id": "imported-provider",
+                        "base_url": "https://provider.example.com/v1",
+                        "model": null
+                    }
+                }]
+            },
+            "auths": {
+                "imported-account": { "OPENAI_API_KEY": "sk-test" }
+            }
+        });
+
+        let result = import_payload(&home, payload);
+
+        assert_eq!(result.get("ok").and_then(Value::as_bool), Some(true));
+        let imported = load_registry(&home).unwrap();
+        assert_eq!(imported.accounts.len(), 1);
+        assert_eq!(imported.accounts[0].account_key, "imported-account");
+        assert!(imported.accounts[0].email.is_empty());
+        assert!(imported.accounts[0]
+            .provider
+            .as_ref()
+            .unwrap()
+            .model
+            .is_empty());
+        assert!(account_auth_path(&home, "imported-account").exists());
         let _ = fs::remove_dir_all(home);
     }
 

@@ -34,8 +34,37 @@ pub struct OAuthTokens {
 
 #[derive(Debug)]
 pub enum OAuthOutcome {
-    Tokens(OAuthTokens),
+    Authorized {
+        tokens: OAuthTokens,
+        responder: OAuthResponder,
+    },
     Cancelled,
+}
+
+#[derive(Debug)]
+pub struct OAuthResponder(TcpStream);
+
+impl OAuthResponder {
+    pub async fn success(mut self) {
+        write_response(
+            &mut self.0,
+            "200 OK",
+            "text/html; charset=utf-8",
+            SUCCESS_HTML,
+        )
+        .await;
+    }
+
+    pub async fn failure(mut self, error: &str) {
+        let html = format!("<h2>Sign-in failed</h2><p>{}</p>", escape_html(error));
+        write_response(
+            &mut self.0,
+            "500 Internal Server Error",
+            "text/html; charset=utf-8",
+            &html,
+        )
+        .await;
+    }
 }
 
 #[derive(Default)]
@@ -293,8 +322,10 @@ async fn browser_login_inner(
                 };
                 match exchange_code(client, code, &verifier).await {
                     Ok(tokens) => {
-                        write_response(&mut stream, "200 OK", "text/html; charset=utf-8", SUCCESS_HTML).await;
-                        return Ok(OAuthOutcome::Tokens(tokens));
+                        return Ok(OAuthOutcome::Authorized {
+                            tokens,
+                            responder: OAuthResponder(stream),
+                        });
                     }
                     Err(error) => {
                         let html = format!("<h2>Sign-in failed</h2><p>{}</p>", escape_html(&error));
@@ -316,4 +347,52 @@ pub async fn browser_login(
     let result = browser_login_inner(client, app, cancel).await;
     coordinator.finish();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn connected_streams() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = TcpStream::connect(address).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        (server, client)
+    }
+
+    #[tokio::test]
+    async fn responder_does_not_report_success_before_it_is_consumed() {
+        let (server, mut client) = connected_streams().await;
+        let responder = OAuthResponder(server);
+        let mut byte = [0_u8; 1];
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), client.read(&mut byte))
+                .await
+                .is_err()
+        );
+
+        responder.success().await;
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        let response = String::from_utf8(response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("Sign-in complete"));
+    }
+
+    #[tokio::test]
+    async fn responder_reports_persistence_failures_without_a_success_page() {
+        let (server, mut client) = connected_streams().await;
+        OAuthResponder(server)
+            .failure("Could not save <registry> & \"auth\".")
+            .await;
+
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        let response = String::from_utf8(response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 500 Internal Server Error"));
+        assert!(response.contains("Could not save &lt;registry&gt; &amp; &quot;auth&quot;."));
+        assert!(!response.contains("Sign-in complete"));
+    }
 }

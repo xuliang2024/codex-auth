@@ -3,9 +3,12 @@ mod oauth;
 mod registry;
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use chrono::Utc;
 use futures::stream::{self, StreamExt as _};
@@ -29,14 +32,8 @@ struct AppState {
 
 impl AppState {
     fn new() -> Result<Self, String> {
-        let codex_home = match std::env::var_os("CODEX_HOME") {
-            Some(path) => PathBuf::from(path),
-            None => home_directory()
-                .ok_or_else(|| {
-                    "Could not determine the current user's home directory.".to_string()
-                })?
-                .join(".codex"),
-        };
+        let codex_home = codex_home_directory()
+            .ok_or_else(|| "Could not determine the current user's home directory.".to_string())?;
         Ok(Self {
             codex_home,
             client: network::build_client()?,
@@ -47,10 +44,83 @@ impl AppState {
     }
 }
 
-fn home_directory() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+fn non_empty_path(value: Option<OsString>) -> Option<OsString> {
+    value.filter(|path| !path.is_empty())
+}
+
+fn select_home_directory(
+    home: Option<OsString>,
+    user_profile: Option<OsString>,
+    windows: bool,
+) -> Option<PathBuf> {
+    let home = non_empty_path(home).map(PathBuf::from);
+    let user_profile = non_empty_path(user_profile).map(PathBuf::from);
+    if windows {
+        user_profile.or(home)
+    } else {
+        home.or(user_profile)
+    }
+}
+
+fn has_account_data(codex_home: &Path) -> bool {
+    if codex_home.join("auth.json").is_file() {
+        return true;
+    }
+    if let Ok(content) = fs::read_to_string(codex_home.join("accounts/registry.json")) {
+        match serde_json::from_str::<Value>(&content) {
+            Ok(value) => {
+                if value
+                    .get("accounts")
+                    .and_then(Value::as_array)
+                    .is_some_and(|accounts| !accounts.is_empty())
+                    || value
+                        .get("active_account_key")
+                        .is_some_and(|key| !key.is_null())
+                {
+                    return true;
+                }
+            }
+            Err(_) => return true,
+        }
+    }
+    fs::read_dir(codex_home.join("accounts"))
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| entry.file_name().to_string_lossy().ends_with(".auth.json"))
+}
+
+fn select_codex_home(
+    explicit: Option<OsString>,
+    home: Option<OsString>,
+    user_profile: Option<OsString>,
+    windows: bool,
+) -> Option<PathBuf> {
+    if let Some(explicit) = non_empty_path(explicit) {
+        return Some(PathBuf::from(explicit));
+    }
+    let home = non_empty_path(home);
+    let user_profile = non_empty_path(user_profile);
+    let preferred_root = select_home_directory(home.clone(), user_profile, windows)?;
+    let preferred = preferred_root.join(".codex");
+    if windows {
+        if let Some(legacy) = home.map(PathBuf::from).map(|path| path.join(".codex")) {
+            if legacy != preferred && !has_account_data(&preferred) && has_account_data(&legacy) {
+                return Some(legacy);
+            }
+        }
+    }
+    Some(preferred)
+}
+
+fn codex_home_directory() -> Option<PathBuf> {
+    select_codex_home(
+        std::env::var_os("CODEX_HOME"),
+        std::env::var_os("HOME"),
+        std::env::var_os("USERPROFILE"),
+        cfg!(windows),
+    )
 }
 
 fn platform_name() -> &'static str {
@@ -215,19 +285,29 @@ async fn login_start(app: AppHandle) -> Value {
     let outcome = oauth::browser_login(&state.client, &state.login, &app).await;
     match outcome {
         Ok(OAuthOutcome::Cancelled) => json!({ "ok": false, "cancelled": true }),
-        Ok(OAuthOutcome::Tokens(tokens)) => {
-            let _guard = match state.registry_lock.lock() {
-                Ok(guard) => guard,
-                Err(_) => return failure("Account storage is busy."),
-            };
-            match registry::persist_chatgpt_login(
-                &state.codex_home,
-                tokens.id_token,
-                tokens.access_token,
-                tokens.refresh_token,
-            ) {
-                Ok((registry, _)) => ok_registry(registry),
-                Err(error) => failure(error),
+        Ok(OAuthOutcome::Authorized { tokens, responder }) => {
+            let persisted: Result<registry::Registry, String> = (|| {
+                let _guard = state
+                    .registry_lock
+                    .lock()
+                    .map_err(|_| "Account storage is busy.".to_string())?;
+                registry::persist_chatgpt_login(
+                    &state.codex_home,
+                    tokens.id_token,
+                    tokens.access_token,
+                    tokens.refresh_token,
+                )
+                .map(|(registry, _)| registry)
+            })();
+            match persisted {
+                Ok(registry) => {
+                    responder.success().await;
+                    ok_registry(registry)
+                }
+                Err(error) => {
+                    responder.failure(&error).await;
+                    failure(error)
+                }
             }
         }
         Err(error) => failure(error),
@@ -507,6 +587,7 @@ fn start_registry_watcher(app: &AppHandle, state: &AppState) -> Result<(), Strin
     registry::ensure_accounts_directory(&state.codex_home).map_err(|error| error.to_string())?;
     let app_handle = app.clone();
     let codex_home = state.codex_home.clone();
+    let event_generation = Arc::new(AtomicU64::new(0));
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
         let Ok(event) = result else {
             return;
@@ -516,7 +597,17 @@ fn start_registry_watcher(app: &AppHandle, state: &AppState) -> Result<(), Strin
             .iter()
             .any(|path| path.file_name().is_some_and(|name| name == "registry.json"))
         {
-            let _ = app_handle.emit("registry-changed", registry::registry_result(&codex_home));
+            let generation = event_generation.fetch_add(1, Ordering::SeqCst) + 1;
+            let event_generation = Arc::clone(&event_generation);
+            let app_handle = app_handle.clone();
+            let codex_home = codex_home.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                if event_generation.load(Ordering::SeqCst) == generation {
+                    let _ =
+                        app_handle.emit("registry-changed", registry::registry_result(&codex_home));
+                }
+            });
         }
     })
     .map_err(|error| error.to_string())?;
@@ -540,6 +631,7 @@ pub fn run() {
         .manage(state)
         .setup(|app| {
             let state = app.state::<AppState>();
+            let _ = registry::repair_registry_from_auth_files(&state.codex_home);
             let _ = registry::sync_active_provider_config(&state.codex_home);
             start_registry_watcher(app.handle(), &state)
                 .map_err(Box::<dyn std::error::Error>::from)?;
@@ -567,4 +659,169 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the desktop application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_home_prefers_user_profile() {
+        assert_eq!(
+            select_home_directory(
+                Some(OsString::from(r"C:\tools\home")),
+                Some(OsString::from(r"C:\Users\person")),
+                true,
+            ),
+            Some(PathBuf::from(r"C:\Users\person"))
+        );
+    }
+
+    #[test]
+    fn empty_home_values_are_ignored() {
+        assert_eq!(
+            select_home_directory(
+                Some(OsString::new()),
+                Some(OsString::from(r"C:\Users\person")),
+                false,
+            ),
+            Some(PathBuf::from(r"C:\Users\person"))
+        );
+        assert_eq!(
+            select_home_directory(Some(OsString::new()), Some(OsString::new()), true),
+            None
+        );
+    }
+
+    #[test]
+    fn non_windows_home_prefers_home() {
+        assert_eq!(
+            select_home_directory(
+                Some(OsString::from("/home/person")),
+                Some(OsString::from("/fallback/person")),
+                false,
+            ),
+            Some(PathBuf::from("/home/person"))
+        );
+    }
+
+    #[test]
+    fn windows_upgrade_uses_legacy_home_only_when_canonical_store_is_empty() {
+        let root = std::env::temp_dir().join(format!(
+            "codex-auth-tauri-home-selection-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let legacy_root = root.join("legacy");
+        let profile_root = root.join("profile");
+        fs::create_dir_all(legacy_root.join(".codex")).unwrap();
+        fs::write(legacy_root.join(".codex/auth.json"), "{}\n").unwrap();
+
+        assert_eq!(
+            select_codex_home(
+                None,
+                Some(legacy_root.clone().into_os_string()),
+                Some(profile_root.clone().into_os_string()),
+                true,
+            ),
+            Some(legacy_root.join(".codex"))
+        );
+
+        fs::create_dir_all(profile_root.join(".codex/accounts")).unwrap();
+        fs::write(
+            profile_root.join(".codex/accounts/registry.json"),
+            r#"{"accounts":[{"account_key":"canonical"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            select_codex_home(
+                None,
+                Some(legacy_root.into_os_string()),
+                Some(profile_root.clone().into_os_string()),
+                true,
+            ),
+            Some(profile_root.join(".codex"))
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires CODEX_AUTH_TEST_SHARE_URL and network access"]
+    async fn live_share_link_downloads_imports_and_reloads() {
+        let share_url = std::env::var("CODEX_AUTH_TEST_SHARE_URL")
+            .expect("CODEX_AUTH_TEST_SHARE_URL must be set for this ignored test");
+        let client = network::build_client().unwrap();
+        let fetched = network::fetch_share_export(&client, &share_url).await;
+        assert_eq!(
+            fetched.get("ok").and_then(Value::as_bool),
+            Some(true),
+            "{}",
+            fetched
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("Share download failed without an error message.")
+        );
+        let payload = fetched.get("payload").cloned().unwrap();
+        let home = std::env::temp_dir().join(format!(
+            "codex-auth-tauri-live-share-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(home.join("accounts")).unwrap();
+        fs::write(
+            home.join("accounts/registry.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema_version": 5,
+                "accounts": [{
+                    "account_key": "legacy-provider",
+                    "chatgpt_account_id": "",
+                    "chatgpt_user_id": "",
+                    "email": "",
+                    "alias": "",
+                    "auth_mode": "provider",
+                    "provider": {
+                        "id": "legacy-provider",
+                        "base_url": "https://provider.example.com/v1",
+                        "model": null
+                    }
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            registry::account_auth_path(&home, "legacy-provider"),
+            b"{\"OPENAI_API_KEY\":\"sk-fixture\"}\n",
+        )
+        .unwrap();
+        assert!(registry::load_registry(&home).is_ok());
+        let imported = registry::import_payload(&home, payload);
+        assert_eq!(
+            imported.get("ok").and_then(Value::as_bool),
+            Some(true),
+            "{}",
+            imported
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("Share import failed without an error message.")
+        );
+
+        let registry = registry::load_registry(&home).unwrap();
+        assert!(registry.accounts.len() > 1);
+        assert!(registry
+            .accounts
+            .iter()
+            .any(|account| account.account_key == "legacy-provider"));
+        for account in &registry.accounts {
+            assert!(registry::account_auth_path(&home, &account.account_key).exists());
+        }
+        let reloaded = registry::registry_result(&home);
+        assert_eq!(reloaded.get("ok").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            reloaded
+                .pointer("/data/accounts")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(registry.accounts.len())
+        );
+        let _ = fs::remove_dir_all(home);
+    }
 }
