@@ -11,6 +11,56 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Get-PeSubsystem {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  $reader = [System.IO.BinaryReader]::new([System.IO.File]::OpenRead($Path))
+  try {
+    $stream = $reader.BaseStream
+    if ($stream.Length -lt 64) {
+      throw "The executable is too small to contain a valid PE header: '$Path'."
+    }
+
+    $stream.Position = 0
+    if ($reader.ReadUInt16() -ne 0x5a4d) {
+      throw "The executable does not contain a valid MZ signature: '$Path'."
+    }
+
+    $stream.Position = 0x3c
+    $peOffset = [int64]($reader.ReadUInt32())
+    if ($peOffset -gt $stream.Length - 24) {
+      throw "The executable has an invalid PE header offset: '$Path'."
+    }
+
+    $stream.Position = $peOffset
+    if ($reader.ReadUInt32() -ne 0x00004550) {
+      throw "The executable does not contain a valid PE signature: '$Path'."
+    }
+
+    $stream.Position = $peOffset + 20
+    $optionalHeaderSize = [int]($reader.ReadUInt16())
+    $optionalHeaderOffset = $peOffset + 24
+    if ($optionalHeaderSize -lt 70 -or $optionalHeaderOffset + $optionalHeaderSize -gt $stream.Length) {
+      throw "The executable has an invalid PE optional header: '$Path'."
+    }
+
+    $stream.Position = $optionalHeaderOffset
+    $optionalHeaderMagic = $reader.ReadUInt16()
+    if ($optionalHeaderMagic -ne 0x010b -and $optionalHeaderMagic -ne 0x020b) {
+      throw "The executable has an unsupported PE optional header: '$Path'."
+    }
+
+    $stream.Position = $optionalHeaderOffset + 68
+    return [int]($reader.ReadUInt16())
+  }
+  finally {
+    $reader.Dispose()
+  }
+}
+
 $productName = "Accounts for Codex"
 $binaryName = "codex-auth-desktop-tauri.exe"
 $bundleDirectory = Join-Path $TargetDirectory "$Target\release\bundle\nsis"
@@ -41,6 +91,12 @@ try {
   if (-not (Test-Path $uninstallerPath -PathType Leaf)) {
     throw "The NSIS uninstaller was not found at '$uninstallerPath'."
   }
+
+  $appSubsystem = Get-PeSubsystem -Path $appPath
+  if ($appSubsystem -ne 2) {
+    throw "The installed application must use the Windows GUI subsystem (2), found $appSubsystem."
+  }
+  Write-Host "The installed application uses the Windows GUI subsystem."
 
   Write-Host "Launching the installed application."
   $appProcess = Start-Process -FilePath $appPath -WorkingDirectory $installDirectory -PassThru
