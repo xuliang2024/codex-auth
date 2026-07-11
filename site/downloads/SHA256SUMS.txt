@@ -1,6 +1,6 @@
-0a709572e18764718b78e3038f9a55ff9c5ecbdaaafb4a944debc0e577a7c25c  codex-auth-desktop-0.2.1-macos-arm64.dmg
-17d01ffb94f875c7bfbf12d2c4f680ac754b45c8abf16cf53af1e1457a325169  codex-auth-desktop-0.2.1-macos-arm64.zip
-dd91b1804dbb905471ce9f1bd18323d7094a675a5ee7be8b7066a69b97710a78  codex-auth-desktop-0.2.1-macos-x64.dmg
-fdc0a055407a0fc2bf9460cf88cafbf6fb9e12f33d8c66c28782e7e31ee10e2c  codex-auth-desktop-0.2.1-macos-x64.zip
-e78ba56bb1e88c9c2d700546f1fe1abb8a82fdff9f84b9afa93925bcb315743f  codex-auth-desktop-0.2.1-win-arm64.exe
-d48d957f836ae73b0ab0a888458102246d35bc0bc7138a66fde395767749bd09  codex-auth-desktop-0.2.1-win-x64.exe
+42ebd30f9cce301e10d7cd87855d14f0e17ed4f29f3da3aee82037a3a6004a25  codex-auth-desktop-0.2.2-macos-arm64.dmg
+0b2675e5fc0759242a0e5b92d44fe1517be2d87441ff3c68e73abac0bdccc369  codex-auth-desktop-0.2.2-macos-arm64.zip
+0948181c8fafbdb2990b7511998f699928c957c308da9dcc53ff9a835f82397a  codex-auth-desktop-0.2.2-macos-x64.dmg
+4c08f61039e2b650645feeba3e15176acc9a505a009f808a347bd54018c952ee  codex-auth-desktop-0.2.2-macos-x64.zip
+5d70e543388a00718bc1e29debfe7d79292761573daf6c3ee637f6300c8265e1  codex-auth-desktop-0.2.2-win-arm64.exe
+f080debfa0b27f26a5efb85310e2804f90cc8f4f4f9c60bd89acf63891b8c7c6  codex-auth-desktop-0.2.2-win-x64.exe

@@ -1,12 +1,12 @@
 (() => {
   const DOWNLOAD_OPTIONS = {
     macosArm64: {
-      href: "/downloads/codex-auth-desktop-0.2.1-macos-arm64.dmg",
+      href: "/downloads/codex-auth-desktop-0.2.2-macos-arm64.dmg",
       label: "下载 macOS Apple 芯片版",
       title: "下载 macOS Apple Silicon DMG",
     },
     macosX64: {
-      href: "/downloads/codex-auth-desktop-0.2.1-macos-x64.dmg",
+      href: "/downloads/codex-auth-desktop-0.2.2-macos-x64.dmg",
       label: "下载 macOS Intel 版",
       title: "下载 macOS Intel DMG",
     },
@@ -16,12 +16,12 @@
       title: "选择 Apple 芯片或 Intel 版本",
     },
     windowsX64: {
-      href: "/downloads/codex-auth-desktop-0.2.1-win-x64.exe",
+      href: "/downloads/codex-auth-desktop-0.2.2-win-x64.exe",
       label: "下载 Windows 应用",
       title: "下载 Windows x64 安装包",
     },
     windowsArm64: {
-      href: "/downloads/codex-auth-desktop-0.2.1-win-arm64.exe",
+      href: "/downloads/codex-auth-desktop-0.2.2-win-arm64.exe",
       label: "下载 Windows ARM 应用",
       title: "下载 Windows ARM64 安装包",
     },
