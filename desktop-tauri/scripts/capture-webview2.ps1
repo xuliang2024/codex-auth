@@ -106,31 +106,67 @@ try {
   }
 
   Write-Host "Capturing WebView2 window '$($appProcess.MainWindowTitle)' from ${width}x${height}."
-  $capturedBitmap = [System.Drawing.Bitmap]::new($width, $height)
-  $captureGraphics = [System.Drawing.Graphics]::FromImage($capturedBitmap)
-  $captureGraphics.CopyFromScreen($origin.X, $origin.Y, 0, 0, $capturedBitmap.Size)
-
-  $normalizedBitmap = [System.Drawing.Bitmap]::new(1000, 700)
-  $normalizedGraphics = [System.Drawing.Graphics]::FromImage($normalizedBitmap)
-  $normalizedGraphics.DrawImage($capturedBitmap, 0, 0, 1000, 700)
-  $normalizedBitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
-
   $brightSamples = 0
   $accentSamples = 0
-  for ($x = 0; $x -lt 1000; $x += 20) {
-    for ($y = 0; $y -lt 700; $y += 20) {
-      $color = $normalizedBitmap.GetPixel($x, $y)
-      if ([Math]::Max($color.R, [Math]::Max($color.G, $color.B)) -gt 90) {
-        $brightSamples++
-      }
-      if (($color.B -gt 140 -and $color.B -gt $color.R + 25) -or
-          ($color.G -gt 120 -and $color.G -gt $color.R + 25)) {
-        $accentSamples++
+  $rendered = $false
+  $maxCaptureAttempts = 30
+  for ($captureAttempt = 1; $captureAttempt -le $maxCaptureAttempts; $captureAttempt++) {
+    $appProcess.Refresh()
+    if ($appProcess.HasExited) {
+      throw "The WebView2 visual-test app exited with code $($appProcess.ExitCode)."
+    }
+
+    if ($null -ne $normalizedGraphics) {
+      $normalizedGraphics.Dispose()
+      $normalizedGraphics = $null
+    }
+    if ($null -ne $normalizedBitmap) {
+      $normalizedBitmap.Dispose()
+      $normalizedBitmap = $null
+    }
+    if ($null -ne $captureGraphics) {
+      $captureGraphics.Dispose()
+      $captureGraphics = $null
+    }
+    if ($null -ne $capturedBitmap) {
+      $capturedBitmap.Dispose()
+      $capturedBitmap = $null
+    }
+
+    $capturedBitmap = [System.Drawing.Bitmap]::new($width, $height)
+    $captureGraphics = [System.Drawing.Graphics]::FromImage($capturedBitmap)
+    $captureGraphics.CopyFromScreen($origin.X, $origin.Y, 0, 0, $capturedBitmap.Size)
+
+    $normalizedBitmap = [System.Drawing.Bitmap]::new(1000, 700)
+    $normalizedGraphics = [System.Drawing.Graphics]::FromImage($normalizedBitmap)
+    $normalizedGraphics.DrawImage($capturedBitmap, 0, 0, 1000, 700)
+    $normalizedBitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+    $brightSamples = 0
+    $accentSamples = 0
+    for ($x = 0; $x -lt 1000; $x += 20) {
+      for ($y = 0; $y -lt 700; $y += 20) {
+        $color = $normalizedBitmap.GetPixel($x, $y)
+        if ([Math]::Max($color.R, [Math]::Max($color.G, $color.B)) -gt 90) {
+          $brightSamples++
+        }
+        if (($color.B -gt 140 -and $color.B -gt $color.R + 25) -or
+            ($color.G -gt 120 -and $color.G -gt $color.R + 25)) {
+          $accentSamples++
+        }
       }
     }
+    if ($brightSamples -ge 25 -and $accentSamples -ge 5) {
+      $rendered = $true
+      break
+    }
+    if ($captureAttempt -lt $maxCaptureAttempts) {
+      Write-Host "WebView2 UI is not ready on capture attempt $captureAttempt/$maxCaptureAttempts (bright=$brightSamples accent=$accentSamples); retrying."
+      Start-Sleep -Milliseconds 500
+    }
   }
-  if ($brightSamples -lt 25 -or $accentSamples -lt 5) {
-    throw "The WebView2 screenshot does not contain the expected rendered UI colors."
+  if (-not $rendered) {
+    throw "The WebView2 screenshot did not contain the expected rendered UI colors after $maxCaptureAttempts attempts (bright=$brightSamples accent=$accentSamples)."
   }
 
   Write-Host "Captured a normalized 1000x700 WebView2 screenshot at '$outputPath'."
