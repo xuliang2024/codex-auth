@@ -17,8 +17,10 @@ Implemented:
 - Registry loading, account switching and removal, private auth snapshots,
   managed provider configuration, and the `gpt-5.6-sol` provider default.
 - ChatGPT browser OAuth with PKCE and a local callback on port 1455.
+- Explicit HTTP, SOCKS5, and system/TUN proxy support for OAuth and API calls.
 - API provider login and endpoint tests.
-- Account usage refresh, token refresh, and expired-session reporting.
+- Account usage refresh, token refresh, refreshed snapshot synchronization, and
+  expired-session reporting.
 - File and share-link import/export.
 - Announcement and external-link handling.
 - External registry file watching.
@@ -111,7 +113,10 @@ already been approved.
 
 - [ ] Run live ChatGPT OAuth through direct, HTTP proxy, SOCKS proxy, and TUN
   network configurations.
-- [ ] Test real provider endpoints and token refresh behavior.
+- [x] Test real provider endpoints and token refresh behavior. APIZ,
+  BytePlus Ark, and a Claude Responses gateway returned valid Responses API
+  payloads; an intentionally invalid access token refreshed successfully and
+  updated both the active auth file and its account snapshot.
 - [x] Verify arm64 and x64 macOS builds on macOS 12 or newer.
 - [x] Build, install, launch, and uninstall Windows x64 and arm64 NSIS
   installers on Windows CI.

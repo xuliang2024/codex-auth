@@ -192,6 +192,7 @@ pub async fn test_api_endpoint(client: &Client, options: TestApiOptions) -> Valu
 async fn refresh_auth_tokens(
     client: &Client,
     auth_path: &Path,
+    snapshot_path: Option<&Path>,
     auth: &mut Value,
 ) -> Result<(), String> {
     let refresh_token = auth
@@ -231,10 +232,23 @@ async fn refresh_auth_tokens(
         auth["tokens"]["refresh_token"] = Value::String(refresh_token.to_string());
     }
     auth["last_refresh"] = Value::String(chrono::Utc::now().to_rfc3339());
+    persist_refreshed_auth(auth_path, snapshot_path, auth)
+}
+
+fn persist_refreshed_auth(
+    auth_path: &Path,
+    snapshot_path: Option<&Path>,
+    auth: &Value,
+) -> Result<(), String> {
     let mut serialized = serde_json::to_string_pretty(auth).map_err(|error| error.to_string())?;
     serialized.push('\n');
-    write_private_file(auth_path, serialized)
-        .map_err(|error| format!("failed to save refreshed tokens: {error}"))
+    write_private_file(auth_path, &serialized)
+        .map_err(|error| format!("failed to save refreshed tokens: {error}"))?;
+    if let Some(path) = snapshot_path {
+        write_private_file(path, &serialized)
+            .map_err(|error| format!("failed to save refreshed account snapshot: {error}"))?;
+    }
+    Ok(())
 }
 
 async fn fetch_usage(
@@ -283,12 +297,15 @@ pub async fn fetch_account_usage_status(
         Err(error) => return UsageStatus::failure(false, error),
     };
     let live_path = active_auth_path(codex_home);
-    let auth_path =
-        if registry.active_account_key.as_deref() == Some(account_key) && live_path.exists() {
-            live_path
-        } else {
-            account_auth_path(codex_home, account_key)
-        };
+    let uses_active_auth =
+        registry.active_account_key.as_deref() == Some(account_key) && live_path.exists();
+    let auth_path = if uses_active_auth {
+        live_path
+    } else {
+        account_auth_path(codex_home, account_key)
+    };
+    let refreshed_snapshot_path =
+        uses_active_auth.then(|| account_auth_path(codex_home, account_key));
     let mut auth = match read_auth_value(&auth_path) {
         Some(auth) => auth,
         None => {
@@ -315,7 +332,14 @@ pub async fn fetch_account_usage_status(
         Err(error) => return UsageStatus::failure(false, format!("Usage request failed: {error}")),
     };
     if response.status() == StatusCode::UNAUTHORIZED {
-        if let Err(error) = refresh_auth_tokens(client, &auth_path, &mut auth).await {
+        if let Err(error) = refresh_auth_tokens(
+            client,
+            &auth_path,
+            refreshed_snapshot_path.as_deref(),
+            &mut auth,
+        )
+        .await
+        {
             return UsageStatus::failure(
                 true,
                 format!("Session expired — sign in again with Add Account. ({error})"),
@@ -565,5 +589,27 @@ mod tests {
             Some(300)
         );
         assert_eq!(parsed.get("resets_at").and_then(Value::as_i64), Some(1234));
+    }
+
+    #[test]
+    fn refreshed_active_auth_is_mirrored_to_the_account_snapshot() {
+        let root =
+            std::env::temp_dir().join(format!("codex-auth-refresh-test-{}", uuid::Uuid::new_v4()));
+        let live_path = root.join("auth.json");
+        let snapshot_path = root.join("accounts/account.auth.json");
+        let auth = json!({
+            "auth_mode": "chatgpt",
+            "last_refresh": "2026-07-11T00:00:00Z",
+            "tokens": {
+                "access_token": "access-token",
+                "refresh_token": "refresh-token"
+            }
+        });
+
+        persist_refreshed_auth(&live_path, Some(&snapshot_path), &auth).unwrap();
+
+        assert_eq!(read_auth_value(&live_path), Some(auth.clone()));
+        assert_eq!(read_auth_value(&snapshot_path), Some(auth));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
