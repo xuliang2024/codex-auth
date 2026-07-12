@@ -17,6 +17,9 @@ const downloadCodexBtn = document.getElementById("download-codex-btn");
 const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
 const apiFormEl = document.getElementById("api-form");
+const apiFormTitleEl = document.getElementById("api-form-title");
+const apiProviderSelect = document.getElementById("api-provider");
+const apiProviderHint = document.getElementById("api-provider-hint");
 const apiBaseUrlInput = document.getElementById("api-base-url");
 const apiKeyInput = document.getElementById("api-key");
 const apiNameInput = document.getElementById("api-name");
@@ -247,12 +250,52 @@ async function applyImportResult(result) {
 
 let registry = null;
 let busy = false;
+let editingProviderKey = null;
 let toastTimer = null;
 let announcements = [];
 // account_key -> { expired: boolean, error: string | null }
 const accountStatuses = new Map();
 // account_key -> { state: "pending" | "success" | "error", message: string }
 const providerTestStatuses = new Map();
+
+const API_PROVIDER_PRESETS = {
+  "openai-compatible": {
+    endpoint: "",
+    name: "",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "medium",
+    requiresModel: false,
+    hintKey: "apiForm.hint.openai",
+  },
+  "byteplus-ark": {
+    endpoint: "https://ark.ap-southeast.bytepluses.com/api/v3",
+    name: "byteplus-ark",
+    model: "seed-2-0-lite-260228",
+    reasoningEffort: null,
+    requiresModel: true,
+    hintKey: "apiForm.hint.byteplusArk",
+  },
+  "claude-responses": {
+    endpoint: "",
+    name: "claude",
+    model: "",
+    reasoningEffort: null,
+    requiresModel: true,
+    hintKey: "apiForm.hint.claudeResponses",
+  },
+  "custom-responses": {
+    endpoint: "",
+    name: "",
+    model: "",
+    reasoningEffort: null,
+    requiresModel: true,
+    hintKey: "apiForm.hint.customResponses",
+  },
+};
+
+function currentApiProviderPreset() {
+  return API_PROVIDER_PRESETS[apiProviderSelect.value] ?? API_PROVIDER_PRESETS["openai-compatible"];
+}
 
 function showToast(message, kind = "info") {
   clearTimeout(toastTimer);
@@ -298,6 +341,52 @@ function esc(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
   return div.innerHTML;
+}
+
+function isBytePlusArkProvider(provider) {
+  const id = String(provider?.id ?? "").toLowerCase();
+  const baseUrl = String(provider?.base_url ?? "").toLowerCase();
+  return id === "byteplus-ark" || baseUrl.includes(".bytepluses.com/api/v3") || baseUrl.includes(".volces.com/api/v3");
+}
+
+function isVolcengineArkProvider(provider) {
+  const id = String(provider?.id ?? "").toLowerCase();
+  const baseUrl = String(provider?.base_url ?? "").toLowerCase();
+  return id === "volcengine-ark" || id === "doubao" || baseUrl.includes(".volces.com/api/v3");
+}
+
+function isClaudeProvider(provider) {
+  const id = String(provider?.id ?? "").toLowerCase();
+  const model = String(provider?.model ?? "").toLowerCase();
+  return id.includes("claude") || model.startsWith("claude-");
+}
+
+function isLikelyOpenAiModel(model) {
+  const slug = String(model ?? "").trim().toLowerCase();
+  return ["gpt-", "o1", "o3", "o4", "codex-", "chatgpt-", "computer-use-"].some((prefix) => slug.startsWith(prefix));
+}
+
+function apiProviderKind(provider) {
+  if (isBytePlusArkProvider(provider)) return "byteplus-ark";
+  if (isClaudeProvider(provider)) return "claude-responses";
+  if (provider?.model && !isLikelyOpenAiModel(provider.model)) return "custom-responses";
+  return "openai-compatible";
+}
+
+function providerLabel(provider) {
+  if (isVolcengineArkProvider(provider)) return "Volcengine Ark";
+  if (isBytePlusArkProvider(provider)) return "BytePlus Ark";
+  if (isClaudeProvider(provider)) return "Claude via Responses";
+  return provider?.id || t("card.provider.generic");
+}
+
+function providerModelLabel(provider) {
+  const model = String(provider?.model ?? "").trim();
+  if (!model) return "";
+  if (isBytePlusArkProvider(provider) && ["seed-2-0-lite-260228", "seed-2-0-lite-260428"].includes(model)) {
+    return "BytePlus Seed 2.0 Lite";
+  }
+  return model;
 }
 
 function announcementText(announcement) {
@@ -394,6 +483,9 @@ function render() {
       const status = accountStatuses.get(acc.account_key);
       const providerTestStatus = providerTestStatuses.get(acc.account_key);
       const isExpired = status?.expired === true;
+      const providerName = providerLabel(acc.provider);
+      const providerModel = providerModelLabel(acc.provider);
+      const providerEndpoint = acc.provider?.base_url ?? "";
       return `
       <div class="account-card ${isActive ? "active" : ""} ${isExpired ? "expired" : ""}" data-email="${esc(acc.email)}" data-key="${esc(acc.account_key)}">
         <div class="card-top">
@@ -416,6 +508,14 @@ function render() {
                 <polyline points="21 3 21 9 15 9" />
               </svg>
             </button>`}
+            ${isProvider
+              ? `<button class="btn btn-ghost edit-api-btn" title="${esc(t("card.editApi.tip"))}" aria-label="${esc(t("card.editApi.tip"))}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                  </svg>
+                </button>`
+              : ""}
             <button class="btn btn-ghost export-one-btn" title="${esc(t("card.export.tip"))}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3v12" />
@@ -433,7 +533,12 @@ function render() {
         </div>
         ${
           isProvider
-            ? `<div class="no-usage">${esc(t("card.apiProvider", { base: acc.provider?.base_url ? ` · ${acc.provider.base_url}` : "" }))}</div>
+            ? `<div class="provider-summary">
+                 <span class="provider-name">${esc(providerName)}</span>
+                 ${providerModel ? `<span class="provider-model">${esc(providerModel)}</span>` : ""}
+               </div>
+               ${providerEndpoint ? `<div class="provider-endpoint">${esc(providerEndpoint)}</div>` : ""}
+               <div class="provider-note">${esc(t("card.apiProvider.noUsage"))}</div>
                ${providerTestStatus
                  ? `<div class="provider-test-result ${esc(providerTestStatus.state)}">${esc(providerTestStatus.message)}</div>`
                  : ""}`
@@ -464,6 +569,7 @@ function setBusy(value) {
   exportBtn.disabled = value;
   apiFormSaveBtn.disabled = value;
   apiFormTestBtn.disabled = value;
+  apiFormCancelBtn.disabled = value;
   for (const btn of listEl.querySelectorAll("button")) btn.disabled = value;
 }
 
@@ -486,7 +592,14 @@ listEl.addEventListener("click", async (event) => {
   if (!card) return;
   const email = card.dataset.email;
 
-  if (event.target.closest(".test-api-btn")) {
+  if (event.target.closest(".edit-api-btn")) {
+    const account = registry?.accounts?.find((item) => item.account_key === card.dataset.key);
+    if (!account?.provider) {
+      showToast(t("toast.providerNotFound"), "error");
+      return;
+    }
+    openApiFormForEdit(account);
+  } else if (event.target.closest(".test-api-btn")) {
     providerTestStatuses.set(card.dataset.key, {
       state: "pending",
       message: t("api.testing"),
@@ -628,38 +741,148 @@ function setApiTestStatus(state, message) {
   apiTestStatusEl.textContent = message;
 }
 
+function normalizeApiBaseUrl(value) {
+  let normalized = String(value ?? "").trim().replace(/\/+$/g, "");
+  if (normalized.toLowerCase().endsWith("/responses")) {
+    normalized = normalized.slice(0, -"/responses".length).replace(/\/+$/g, "");
+  }
+  return normalized;
+}
+
+function applyApiProviderPreset() {
+  if (editingProviderKey) return;
+  const preset = currentApiProviderPreset();
+  apiBaseUrlInput.value = preset.endpoint;
+  apiNameInput.value = preset.name;
+  apiModelInput.value = preset.model;
+  apiProviderHint.textContent = t(preset.hintKey);
+  setApiTestStatus(null);
+}
+
+function setApiFormIdentityLocked(locked) {
+  apiProviderSelect.disabled = locked;
+  apiBaseUrlInput.readOnly = locked;
+  apiNameInput.readOnly = locked;
+  apiFormEl.classList.toggle("editing", locked);
+}
+
+function refreshApiFormModeCopy() {
+  const isEditing = Boolean(editingProviderKey);
+  apiFormTitleEl.textContent = t(isEditing ? "apiForm.editTitle" : "apiForm.title");
+  apiFormSaveBtn.textContent = t(isEditing ? "apiForm.update" : "apiForm.save");
+  apiKeyInput.placeholder = isEditing ? t("apiForm.apiKey.editPlaceholder") : "sk-...";
+  apiProviderHint.textContent = isEditing
+    ? t("apiForm.editHint")
+    : t(currentApiProviderPreset().hintKey);
+}
+
+function readApiFormOptions() {
+  const preset = currentApiProviderPreset();
+  const baseUrl = normalizeApiBaseUrl(apiBaseUrlInput.value);
+  apiBaseUrlInput.value = baseUrl;
+  return {
+    baseUrl,
+    apiKey: apiKeyInput.value.trim(),
+    name: apiNameInput.value.trim(),
+    model: apiModelInput.value.trim(),
+    reasoningEffort: preset.reasoningEffort,
+    providerKind: apiProviderSelect.value,
+  };
+}
+
+function apiFormError(options) {
+  if (!options.baseUrl || (!editingProviderKey && !options.apiKey)) return t("api.enterFirst");
+  if (currentApiProviderPreset().requiresModel && !options.model) return t("api.modelRequired");
+  return null;
+}
+
+function apiResultError(result) {
+  const key = {
+    invalid_url: "api.error.invalidUrl",
+    missing_key: "api.error.missingKey",
+    unsupported_anthropic_protocol: "api.error.nativeAnthropic",
+    authentication_failed: "api.error.authentication",
+    responses_not_found: "api.error.responsesNotFound",
+    invalid_responses_payload: "api.error.invalidPayload",
+  }[result?.code];
+  return key ? t(key, { status: result.status ?? "" }) : result?.error;
+}
+
 function resetApiForm() {
   apiFormEl.classList.add("hidden");
+  editingProviderKey = null;
+  setApiFormIdentityLocked(false);
+  apiProviderSelect.value = "openai-compatible";
   apiBaseUrlInput.value = "";
   apiKeyInput.value = "";
   apiNameInput.value = "";
   apiModelInput.value = "";
   setApiTestStatus(null);
+  refreshApiFormModeCopy();
+}
+
+function openApiFormForAdd() {
+  resetApiForm();
+  apiFormEl.classList.remove("hidden");
+  applyApiProviderPreset();
+  refreshApiFormModeCopy();
+  apiProviderSelect.focus();
+}
+
+function openApiFormForEdit(account) {
+  resetApiForm();
+  editingProviderKey = account.account_key;
+  apiProviderSelect.value = apiProviderKind(account.provider);
+  apiBaseUrlInput.value = account.provider.base_url ?? "";
+  apiKeyInput.value = "";
+  apiNameInput.value = account.alias || account.provider.id || "";
+  apiModelInput.value = account.provider.model ?? "";
+  setApiFormIdentityLocked(true);
+  refreshApiFormModeCopy();
+  apiFormEl.classList.remove("hidden");
+  apiModelInput.focus();
+  apiFormEl.scrollIntoView({ block: "nearest" });
 }
 
 addApiBtn.addEventListener("click", () => {
   if (busy) return;
-  apiFormEl.classList.toggle("hidden");
-  if (!apiFormEl.classList.contains("hidden")) apiBaseUrlInput.focus();
+  if (apiFormEl.classList.contains("hidden")) openApiFormForAdd();
+  else resetApiForm();
+});
+
+apiProviderSelect.addEventListener("change", applyApiProviderPreset);
+
+apiBaseUrlInput.addEventListener("blur", () => {
+  apiBaseUrlInput.value = normalizeApiBaseUrl(apiBaseUrlInput.value);
 });
 
 apiFormCancelBtn.addEventListener("click", () => {
   resetApiForm();
 });
 
+function testApiFormOptions(options, accountKey = null) {
+  if (accountKey) {
+    return window.codexAuth.testProviderAccount(accountKey, {
+      apiKey: options.apiKey,
+      model: options.model,
+    });
+  }
+  return window.codexAuth.testApiEndpoint(options);
+}
+
 apiFormTestBtn.addEventListener("click", async () => {
   if (busy) return;
-  const baseUrl = apiBaseUrlInput.value.trim();
-  const apiKey = apiKeyInput.value.trim();
-  const model = apiModelInput.value.trim();
-  if (!baseUrl || !apiKey) {
-    setApiTestStatus("error", t("api.enterFirst"));
+  const accountKey = editingProviderKey;
+  const options = readApiFormOptions();
+  const validationError = apiFormError(options);
+  if (validationError) {
+    setApiTestStatus("error", validationError);
     return;
   }
   setBusy(true);
   apiTestSpinner.classList.remove("hidden");
   setApiTestStatus("pending", t("api.testing"));
-  const result = await window.codexAuth.testApiEndpoint({ baseUrl, apiKey, model });
+  const result = await testApiFormOptions(options, accountKey);
   apiTestSpinner.classList.add("hidden");
   if (result.ok) {
     const detail = [result.model ? `model: ${result.model}` : null, result.reply ? `reply: "${result.reply}"` : null]
@@ -667,34 +890,39 @@ apiFormTestBtn.addEventListener("click", async () => {
       .join(" · ");
     setApiTestStatus("success", `${t("api.ok", { status: result.status })}${detail ? ` — ${detail}` : ""}`);
   } else {
-    setApiTestStatus("error", `✕ ${result.error}`);
+    setApiTestStatus("error", `✕ ${apiResultError(result)}`);
   }
   setBusy(false);
 });
 
 apiFormSaveBtn.addEventListener("click", async () => {
   if (busy) return;
-  const baseUrl = apiBaseUrlInput.value.trim();
-  const apiKey = apiKeyInput.value.trim();
-  const name = apiNameInput.value.trim();
-  const model = apiModelInput.value.trim();
-  if (!baseUrl || !apiKey) {
-    showToast(t("toast.apiRequired"), "error");
+  const accountKey = editingProviderKey;
+  const isEditing = Boolean(accountKey);
+  const options = readApiFormOptions();
+  const validationError = apiFormError(options);
+  if (validationError) {
+    showToast(validationError, "error");
     return;
   }
   setBusy(true);
   apiTestSpinner.classList.remove("hidden");
   // Probe the endpoint first so a typo'd URL or bad key is caught before
-  // adding; the user can still choose to add the account anyway.
-  setApiTestStatus("pending", t("api.testingBeforeAdd"));
-  const test = await window.codexAuth.testApiEndpoint({ baseUrl, apiKey, model });
+  // persisting; the user can still choose to save the account anyway.
+  setApiTestStatus("pending", t(isEditing ? "api.testingBeforeUpdate" : "api.testingBeforeAdd"));
+  const test = await testApiFormOptions(options, accountKey);
   apiTestSpinner.classList.add("hidden");
   if (!test.ok) {
-    setApiTestStatus("error", `✕ ${test.error}`);
+    const errorMessage = apiResultError(test);
+    setApiTestStatus("error", `✕ ${errorMessage}`);
+    if (test.fatal) {
+      setBusy(false);
+      return;
+    }
     const proceed = await showConfirm({
       title: t("confirm.testFailedTitle"),
-      message: t("confirm.testFailedMessage", { error: test.error }),
-      confirmLabel: t("confirm.addAnyway"),
+      message: t(isEditing ? "confirm.testFailedMessageUpdate" : "confirm.testFailedMessage", { error: errorMessage }),
+      confirmLabel: t(isEditing ? "confirm.saveAnyway" : "confirm.addAnyway"),
       danger: true,
     });
     if (!proceed) {
@@ -702,17 +930,23 @@ apiFormSaveBtn.addEventListener("click", async () => {
       return;
     }
   } else {
-    setApiTestStatus("success", t("api.okAdding", { status: test.status }));
+    setApiTestStatus("success", t(isEditing ? "api.okUpdating" : "api.okAdding", { status: test.status }));
   }
-  const result = await window.codexAuth.loginApi({ baseUrl, apiKey, name, model });
+  const result = isEditing
+    ? await window.codexAuth.updateProviderAccount(accountKey, {
+        apiKey: options.apiKey,
+        model: options.model,
+      })
+    : await window.codexAuth.loginApi(options);
   if (result.ok) {
+    if (isEditing) providerTestStatuses.delete(accountKey);
     resetApiForm();
   } else if (!test.ok) {
-    setApiTestStatus("error", `✕ ${test.error}`);
+    setApiTestStatus("error", `✕ ${apiResultError(test)}`);
   } else {
     setApiTestStatus(null);
   }
-  applyResult(result, t("toast.apiAdded"));
+  applyResult(result, t(isEditing ? "toast.apiUpdated" : "toast.apiAdded"));
   setBusy(false);
 });
 
@@ -865,6 +1099,7 @@ emptyImportBtn.addEventListener("click", runImportFlow);
 
 langSelect.addEventListener("change", () => {
   I18N.set(langSelect.value);
+  refreshApiFormModeCopy();
   render();
   loadAnnouncements();
 });

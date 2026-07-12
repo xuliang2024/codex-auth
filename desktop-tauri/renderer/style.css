@@ -168,6 +168,7 @@ body.platform-linux .titlebar {
 }
 .btn-ghost:hover:not(:disabled) { color: var(--red); background: rgba(240, 97, 109, 0.1); }
 .refresh-one-btn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.edit-api-btn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
 .export-one-btn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
 
 .btn svg { flex-shrink: 0; }
@@ -421,7 +422,10 @@ body.platform-linux .titlebar {
 
 .account-card.expired .usage-rows,
 .account-card.expired .usage-stale,
-.account-card.expired .no-usage {
+.account-card.expired .no-usage,
+.account-card.expired .provider-summary,
+.account-card.expired .provider-endpoint,
+.account-card.expired .provider-note {
   opacity: 0.45;
 }
 
@@ -441,6 +445,49 @@ body.platform-linux .titlebar {
 .provider-test-result.pending { color: var(--text-dim); }
 .provider-test-result.success { color: var(--green); }
 .provider-test-result.error { color: var(--red); }
+
+.provider-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.provider-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.provider-model {
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.provider-endpoint {
+  margin-top: 7px;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.provider-note {
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
 
 .card-actions {
   flex-shrink: 0;
@@ -623,7 +670,16 @@ body.platform-linux .titlebar {
   color: var(--text-dim);
 }
 
-.api-form-grid input {
+.api-provider-hint {
+  grid-column: 2;
+  margin-top: -2px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.api-form-grid input,
+.api-form-grid select {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -634,8 +690,21 @@ body.platform-linux .titlebar {
   outline: none;
 }
 
-.api-form-grid input:focus {
+.api-form-grid select {
+  appearance: none;
+}
+
+.api-form-grid input:focus,
+.api-form-grid select:focus {
   border-color: var(--border-active);
+}
+
+.api-form.editing .api-form-grid input[readonly],
+.api-form.editing .api-form-grid select:disabled {
+  background: rgba(0, 0, 0, 0.13);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 0.78;
 }
 
 .api-form-actions {

@@ -7,11 +7,11 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const bridgeSource = fs.readFileSync(
-  path.resolve(projectRoot, "..", "desktop", "renderer", "runtime-bridge.js"),
+  path.join(projectRoot, "renderer", "tauri-bridge.js"),
   "utf8",
 );
 
-test("Tauri bridge preserves the Electron-facing desktop API", async () => {
+test("Tauri bridge exposes the desktop API", async () => {
   const calls = [];
   let eventHandler = null;
   let stopped = false;
@@ -42,11 +42,38 @@ test("Tauri bridge preserves the Electron-facing desktop API", async () => {
   assert.equal(window.codexAuth.platform, "darwin");
   await window.codexAuth.getRegistry();
   await window.codexAuth.loginApi({ baseUrl: "https://api.example.com", apiKey: "secret" });
+  await window.codexAuth.testProviderAccount("provider-account");
+  await window.codexAuth.testProviderAccount("provider-account", {
+    apiKey: "replacement-secret",
+    model: "gpt-5.6-sol",
+  });
+  await window.codexAuth.updateProviderAccount("provider-account", {
+    apiKey: "replacement-secret",
+    model: "gpt-5.6-sol",
+  });
   assert.equal(JSON.stringify(calls), JSON.stringify([
     { command: "get_registry", args: undefined },
     {
       command: "login_api",
       args: { opts: { baseUrl: "https://api.example.com", apiKey: "secret" } },
+    },
+    {
+      command: "test_provider_account",
+      args: { accountKey: "provider-account" },
+    },
+    {
+      command: "test_provider_account",
+      args: {
+        accountKey: "provider-account",
+        opts: { apiKey: "replacement-secret", model: "gpt-5.6-sol" },
+      },
+    },
+    {
+      command: "update_provider_account",
+      args: {
+        accountKey: "provider-account",
+        opts: { apiKey: "replacement-secret", model: "gpt-5.6-sol" },
+      },
     },
   ]));
 
@@ -64,12 +91,22 @@ test("Tauri bridge preserves the Electron-facing desktop API", async () => {
   assert.equal(stopped, true);
 });
 
-test("bridge does not replace the Electron preload API", () => {
-  const existing = { platform: "win32" };
-  const window = { codexAuth: existing, __TAURI__: { core: {}, event: {} } };
+test("Tauri bridge fails clearly outside the Tauri runtime", () => {
+  assert.throws(
+    () => vm.runInNewContext(bridgeSource, {
+      window: {},
+      navigator: { platform: "Win32", userAgent: "test" },
+    }),
+    /requires the Tauri desktop runtime/,
+  );
+});
+
+test("Tauri bridge preserves an explicitly injected test API", () => {
+  const injectedApi = { platform: "test" };
+  const window = { codexAuth: injectedApi };
   vm.runInNewContext(bridgeSource, {
     window,
-    navigator: { platform: "Win32", userAgent: "test" },
+    navigator: { platform: "test", userAgent: "test" },
   });
-  assert.equal(window.codexAuth, existing);
+  assert.equal(window.codexAuth, injectedApi);
 });

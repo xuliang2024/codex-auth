@@ -1,275 +1,241 @@
-# Desktop Release
+# Tauri Desktop Release
 
-This document records the manual release process for the Electron desktop app
-under `desktop/`. It is separate from the CLI/npm release process in
-`docs/release.md`.
+The production desktop application lives under `desktop-tauri/`. It is the
+only supported desktop implementation. The former Electron application was
+retired and removed on 2026-07-12.
+
+Desktop releases are separate from the CLI/npm process in
+[`docs/release.md`](release.md).
 
 ## Scope
 
-- Current desktop release tags use `desktop-v<version>`.
-- Current GitHub Release assets are macOS Universal DMG, macOS Universal ZIP,
-  and a SHA256 checksum file.
-- `desktop/dist/` and `desktop/node_modules/` are ignored build outputs and
-  should not be committed.
-- If a release also changes any `.zig` file, run `zig build run -- list` as
+- Desktop release tags use `desktop-v<version>`.
+- Supported release targets are macOS arm64, macOS x64, Windows arm64, and
+  Windows x64.
+- macOS releases use Tauri DMG bundles. Windows releases use Tauri NSIS
+  installers.
+- `desktop-tauri/dist/`, `desktop-tauri/node_modules/`, generated frontend
+  directories, and Rust target directories are build outputs and must not be
+  committed.
+- CI exercises all four targets with ad-hoc or unsigned packages. Do not treat
+  a CI artifact as a production release unless its platform signature has been
+  configured and verified.
+- If a release also changes a `.zig` file, run `zig build run -- list` as
   required by `AGENTS.md`.
 
 ## Version Files
 
-Update both desktop version fields:
+Keep the desktop version aligned in all of these files:
 
-- `desktop/package.json`
-- `desktop/package-lock.json`
+- `desktop-tauri/package.json`
+- `desktop-tauri/package-lock.json`
+- `desktop-tauri/src-tauri/tauri.conf.json`
+- `desktop-tauri/src-tauri/Cargo.toml`
+- `desktop-tauri/src-tauri/Cargo.lock`
 
 The desktop version is independent from the CLI version in `src/version.zig`.
-For a normal desktop patch release, bump only the desktop package version.
+The `version-consistency` test included in `npm test` rejects mismatched desktop
+versions.
 
 ## Preflight
 
-From an isolated task directory:
+Create an isolated task directory and check that the release tag is unused:
 
 ```sh
-mkdir -p /tmp/codex-auth-desktop-release
+export TASK=/tmp/codex-auth-desktop-release
+export ROOT=/Users/m007/codes/codex-auth
+export VERSION=<version>
+
+mkdir -p "$TASK"
+HOME="$TASK" git -C "$ROOT" status --short --branch
+HOME="$TASK" git -C "$ROOT" tag -l "desktop-v$VERSION"
+HOME="$TASK" git -C "$ROOT" ls-remote --tags origin "desktop-v$VERSION"
 ```
 
-Check the release target:
+The two tag checks must return no matching tag. Confirm the latest full CI run
+for the release commit is green before packaging.
+
+## Isolated Validation
+
+Build and test from a copy under `/tmp`:
 
 ```sh
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth status --short --branch
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth tag -l 'desktop-v<version>'
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth ls-remote --tags origin 'desktop-v<version>'
-```
+export RUSTUP_HOME_REAL="${RUSTUP_HOME:-$HOME/.rustup}"
 
-Confirm macOS signing and notarization inputs:
-
-```sh
-security find-identity -v -p codesigning | sed -n '1,120p'
-env | rg '^(APPLE|XC_|NOTARYTOOL)='
-```
-
-Expected signing identity:
-
-```text
-Developer ID Application: yi liu (3DP337K4T3)
-```
-
-Expected notarization environment can use either the `APPLE_*` names or these
-aliases:
-
-```text
-XC_APPLE_ID
-XC_APPLE_APP_SPECIFIC_PASSWORD
-XC_APPLE_TEAM_ID
-```
-
-Do not write notarization credentials into files or command history.
-
-## Isolated Build Copy
-
-Build from a `/tmp` copy so Electron output and npm caches stay out of the
-working tree:
-
-```sh
-rm -rf /tmp/codex-auth-desktop-release/repo
-mkdir -p /tmp/codex-auth-desktop-release/repo
+rm -rf "$TASK/repo"
+mkdir -p "$TASK/repo"
 rsync -a --delete \
   --exclude='.git/' \
-  --exclude='desktop/dist/' \
-  --exclude='desktop/node_modules/' \
   --exclude='.DS_Store' \
-  /Users/m007/codes/codex-auth/ \
-  /tmp/codex-auth-desktop-release/repo/
+  --exclude='desktop-tauri/dist/' \
+  --exclude='desktop-tauri/node_modules/' \
+  --exclude='desktop-tauri/frontend-dist/' \
+  --exclude='desktop-tauri/visual-frontend-dist/' \
+  --exclude='desktop-tauri/src-tauri/target/' \
+  "$ROOT/" "$TASK/repo/"
+
+cd "$TASK/repo/desktop-tauri"
+HOME="$TASK" npm_config_cache="$TASK/.npm" npm ci
+HOME="$TASK" npm test
+HOME="$TASK" \
+RUSTUP_HOME="$RUSTUP_HOME_REAL" \
+CARGO_HOME="$TASK/.cargo" \
+CARGO_TARGET_DIR="$TASK/target" \
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+HOME="$TASK" \
+RUSTUP_HOME="$RUSTUP_HOME_REAL" \
+CARGO_HOME="$TASK/.cargo" \
+CARGO_TARGET_DIR="$TASK/target" \
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+HOME="$TASK" \
+RUSTUP_HOME="$RUSTUP_HOME_REAL" \
+CARGO_HOME="$TASK/.cargo" \
+CARGO_TARGET_DIR="$TASK/target" \
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Install dependencies in the isolated copy:
+## Test Packaging
+
+On macOS, an ad-hoc DMG can be built without using production credentials:
 
 ```sh
-cd /tmp/codex-auth-desktop-release/repo/desktop
-HOME=/tmp/codex-auth-desktop-release npm ci
+cd "$TASK/repo/desktop-tauri"
+HOME="$TASK" \
+RUSTUP_HOME="$RUSTUP_HOME_REAL" \
+CARGO_HOME="$TASK/.cargo" \
+CARGO_TARGET_DIR="$TASK/target" \
+APPLE_SIGNING_IDENTITY=- \
+npm run build:dmg
 ```
 
-## Build, Sign, And Notarize
+Use `npm run build:app` when an unpacked `.app` is needed. Ad-hoc packages are
+for validation only and must not be published.
 
-The login keychain identities may not be visible when `HOME` is forced to the
-isolated `/tmp` directory. Keep the worktree and caches isolated, but run the
-Electron signing step with the user's normal home so macOS Keychain can expose
-the Developer ID identity:
+## Production Packaging
+
+Build each target on its matching platform with the production signing and,
+for macOS, notarization credentials available to Tauri. Never set
+`APPLE_SIGNING_IDENTITY=-` for a published build.
+
+The commands used by the CI target matrix are:
 
 ```sh
-rm -rf /tmp/codex-auth-desktop-release/repo/desktop/dist
+# macOS arm64
+npm run build -- --target aarch64-apple-darwin --bundles dmg
 
-HOME=/Users/m007 \
-npm_config_cache=/tmp/codex-auth-desktop-release/.npm \
-ELECTRON_CACHE=/tmp/codex-auth-desktop-release/.cache/electron \
-ELECTRON_BUILDER_CACHE=/tmp/codex-auth-desktop-release/.cache/electron-builder \
-npm run dist
+# macOS x64
+npm run build -- --target x86_64-apple-darwin --bundles dmg
+
+# Windows arm64
+npm run build -- --target aarch64-pc-windows-msvc --bundles nsis
+
+# Windows x64
+npm run build -- --target x86_64-pc-windows-msvc --bundles nsis
 ```
 
-Run this from:
+Keep `HOME`, npm caches, and `CARGO_TARGET_DIR` under the isolated task
+directory. If a platform signing service requires access to the normal keychain
+or certificate store, expose only that credential store to the packaging step;
+do not copy credentials into the repository or task directory.
 
-```sh
-/tmp/codex-auth-desktop-release/repo/desktop
-```
-
-The `afterSign` hook notarizes the `.app` bundle. The DMG also needs its own
-signing, notarization, and stapling step:
-
-```sh
-HOME=/Users/m007 codesign --force \
-  --sign 'Developer ID Application: yi liu (3DP337K4T3)' \
-  --timestamp \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg'
-
-HOME=/Users/m007 xcrun notarytool submit \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg' \
-  --apple-id "$XC_APPLE_ID" \
-  --password "$XC_APPLE_APP_SPECIFIC_PASSWORD" \
-  --team-id "$XC_APPLE_TEAM_ID" \
-  --wait
-
-HOME=/tmp/codex-auth-desktop-release xcrun stapler staple \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg'
-```
-
-## Validation
-
-Verify the app bundle:
-
-```sh
-HOME=/tmp/codex-auth-desktop-release codesign -dv --verbose=4 \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/mac-universal/Accounts for Codex.app'
-
-HOME=/tmp/codex-auth-desktop-release codesign -vvv --deep --strict \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/mac-universal/Accounts for Codex.app'
-
-HOME=/tmp/codex-auth-desktop-release xcrun stapler validate \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/mac-universal/Accounts for Codex.app'
-```
-
-Verify the DMG:
-
-```sh
-HOME=/tmp/codex-auth-desktop-release xcrun stapler validate \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg'
-
-HOME=/tmp/codex-auth-desktop-release spctl -a -vvv -t install \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg'
-```
-
-Expected DMG result:
+Target-specific bundles are written below:
 
 ```text
-accepted
-source=Notarized Developer ID
-origin=Developer ID Application: yi liu (3DP337K4T3)
+$CARGO_TARGET_DIR/<target>/release/bundle/dmg/
+$CARGO_TARGET_DIR/<target>/release/bundle/nsis/
 ```
 
-Check the app version:
+## Package Validation
+
+For each macOS target, validate the app signature, notarization ticket, DMG,
+and version before publishing:
 
 ```sh
-HOME=/tmp/codex-auth-desktop-release /usr/libexec/PlistBuddy \
-  -c 'Print :CFBundleShortVersionString' \
-  '/tmp/codex-auth-desktop-release/repo/desktop/dist/mac-universal/Accounts for Codex.app/Contents/Info.plist'
+codesign -dv --verbose=4 "/path/to/Accounts for Codex.app"
+codesign -vvv --deep --strict "/path/to/Accounts for Codex.app"
+xcrun stapler validate "/path/to/Accounts for Codex.app"
+xcrun stapler validate "/path/to/Accounts for Codex_<version>_<arch>.dmg"
+spctl -a -vvv -t install "/path/to/Accounts for Codex_<version>_<arch>.dmg"
+hdiutil verify "/path/to/Accounts for Codex_<version>_<arch>.dmg"
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+  "/path/to/Accounts for Codex.app/Contents/Info.plist"
 ```
 
-Optionally run syntax checks for desktop JavaScript changes:
+The version must match `$VERSION`, and Gatekeeper must report a notarized
+Developer ID build.
 
-```sh
-HOME=/tmp/codex-auth-desktop-release node --check /tmp/codex-auth-desktop-release/repo/desktop/main.js
-HOME=/tmp/codex-auth-desktop-release node --check /tmp/codex-auth-desktop-release/repo/desktop/lib/registry.js
-HOME=/tmp/codex-auth-desktop-release node --check /tmp/codex-auth-desktop-release/repo/desktop/lib/oauth.js
-HOME=/tmp/codex-auth-desktop-release node --check /tmp/codex-auth-desktop-release/repo/desktop/renderer/app.js
-HOME=/tmp/codex-auth-desktop-release node --check /tmp/codex-auth-desktop-release/repo/desktop/renderer/i18n.js
+For each Windows target, run the repository smoke test on the matching runner
+and confirm that Authenticode reports a valid production signature:
+
+```powershell
+./scripts/smoke-nsis.ps1 -Target "<target>" -TargetDirectory "<cargo-target-dir>"
+Get-AuthenticodeSignature "<installer-path>"
 ```
+
+Install and launch every release bundle on a clean test account. At minimum,
+exercise account listing, ChatGPT login cancellation, API provider creation and
+editing, account switching, and import/export without using a real production
+account registry.
 
 ## Release Assets
 
-Prepare release assets using these names:
+Rename the verified bundles consistently before upload:
 
-```sh
-rm -rf /tmp/codex-auth-desktop-release/assets
-mkdir -p /tmp/codex-auth-desktop-release/assets
-
-cp '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal.dmg' \
-  '/tmp/codex-auth-desktop-release/assets/codex-auth-desktop-<version>-universal.dmg'
-
-cp '/tmp/codex-auth-desktop-release/repo/desktop/dist/Accounts for Codex-<version>-universal-mac.zip' \
-  '/tmp/codex-auth-desktop-release/assets/codex-auth-desktop-<version>-universal-mac.zip'
-
-cd /tmp/codex-auth-desktop-release/assets
-shasum -a 256 \
-  codex-auth-desktop-<version>-universal.dmg \
-  codex-auth-desktop-<version>-universal-mac.zip \
-  > codex-auth-desktop-<version>-SHA256SUMS.txt
+```text
+codex-auth-desktop-<version>-macos-arm64.dmg
+codex-auth-desktop-<version>-macos-x64.dmg
+codex-auth-desktop-<version>-win-arm64.exe
+codex-auth-desktop-<version>-win-x64.exe
+codex-auth-desktop-<version>-SHA256SUMS.txt
 ```
 
-If useful for local handoff, copy the final artifacts back into
-`/Users/m007/codes/codex-auth/desktop/dist/`. The directory is ignored by git.
+Collect the four installers under `$TASK/assets`, then generate checksums:
+
+```sh
+cd "$TASK/assets"
+shasum -a 256 \
+  "codex-auth-desktop-$VERSION-macos-arm64.dmg" \
+  "codex-auth-desktop-$VERSION-macos-x64.dmg" \
+  "codex-auth-desktop-$VERSION-win-arm64.exe" \
+  "codex-auth-desktop-$VERSION-win-x64.exe" \
+  > "codex-auth-desktop-$VERSION-SHA256SUMS.txt"
+```
 
 ## Commit And Tag
 
-Stage only source and version files. Do not stage `.DS_Store`, `desktop/dist/`,
-or `desktop/node_modules/`.
+Stage only intended source, documentation, and version files. Do not stage
+generated frontend files, target directories, installers, credentials, or
+`.DS_Store` files.
 
 ```sh
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth diff --cached --check
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth commit -m "feat(desktop): <summary>"
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth tag -a desktop-v<version> -m "Accounts for Codex <version>"
+HOME="$TASK" git -C "$ROOT" diff --cached --check
+HOME="$TASK" git -C "$ROOT" commit -m "feat(desktop): <summary>"
+HOME="$TASK" git -C "$ROOT" tag -a "desktop-v$VERSION" \
+  -m "Accounts for Codex $VERSION"
+HOME="$TASK" git -C "$ROOT" push origin main
+HOME="$TASK" git -C "$ROOT" push origin "desktop-v$VERSION"
 ```
 
-Push:
-
-```sh
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth push origin main
-HOME=/tmp/codex-auth-desktop-release git -C /Users/m007/codes/codex-auth push origin desktop-v<version>
-```
-
-If `HOME=/tmp/...` cannot read GitHub credentials, use a temporary `GIT_ASKPASS`
-script or run the push from a shell that already has access to the macOS git
-credential helper. Do not commit the helper script, token, or generated auth
-files.
+Do not reuse a desktop version or tag after it has been published.
 
 ## GitHub Release
 
-Create the release:
+Create the release only after all four installers and the checksum file have
+passed validation:
 
 ```sh
-GH_TOKEN="$TOKEN" HOME=/tmp/codex-auth-desktop-release gh release create desktop-v<version> \
-  /tmp/codex-auth-desktop-release/assets/codex-auth-desktop-<version>-universal.dmg \
-  /tmp/codex-auth-desktop-release/assets/codex-auth-desktop-<version>-universal-mac.zip \
-  /tmp/codex-auth-desktop-release/assets/codex-auth-desktop-<version>-SHA256SUMS.txt \
+GH_TOKEN="$TOKEN" HOME="$TASK" gh release create "desktop-v$VERSION" \
+  "$TASK/assets/codex-auth-desktop-$VERSION-macos-arm64.dmg" \
+  "$TASK/assets/codex-auth-desktop-$VERSION-macos-x64.dmg" \
+  "$TASK/assets/codex-auth-desktop-$VERSION-win-arm64.exe" \
+  "$TASK/assets/codex-auth-desktop-$VERSION-win-x64.exe" \
+  "$TASK/assets/codex-auth-desktop-$VERSION-SHA256SUMS.txt" \
   --repo xuliang2024/codex-auth \
-  --title "Accounts for Codex <version>" \
-  --notes "Accounts for Codex <version>" \
+  --title "Accounts for Codex $VERSION" \
+  --notes "Accounts for Codex $VERSION" \
   --latest
 ```
 
-If `gh auth status` is stale but the macOS git credential helper has a valid
-GitHub token, pass the token to `gh` through `GH_TOKEN` without writing it to a
-file.
-
-Verify the public release and asset URLs:
-
-```sh
-HOME=/tmp/codex-auth-desktop-release curl -fsSL \
-  https://api.github.com/repos/xuliang2024/codex-auth/releases/tags/desktop-v<version>
-```
-
-The release should contain:
-
-- `codex-auth-desktop-<version>-universal.dmg`
-- `codex-auth-desktop-<version>-universal-mac.zip`
-- `codex-auth-desktop-<version>-SHA256SUMS.txt`
-
-## Troubleshooting
-
-- If `HOME=/tmp/... security find-identity -v -p codesigning` shows `0 valid
-  identities found`, run the signing build with `HOME=/Users/m007` while keeping
-  the repo copy and caches under `/tmp`.
-- If the `.app` is notarized but the DMG is rejected by `spctl`, sign,
-  notarize, and staple the DMG separately.
-- If `codesign` fails with `errSecInternalComponent`, the private key access
-  control may need to allow `codesign`. Do not put the login keychain password
-  in chat or in repository files.
-- If the GitHub upload is slow or silent, wait; the DMG and ZIP together are
-  roughly 400 MB.
+Verify the public release and every asset URL. Only after the assets are
+publicly available should `site/downloads.js`, `site/index.html`, and
+`site/downloads/SHA256SUMS.txt` be updated to reference them.

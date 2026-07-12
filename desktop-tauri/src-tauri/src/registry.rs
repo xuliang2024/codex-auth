@@ -112,6 +112,15 @@ pub struct AddProviderOptions {
     pub reasoning_effort: ReasoningEffort,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProviderOptions {
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum ReasoningEffort {
     #[default]
@@ -1352,9 +1361,121 @@ pub fn read_account_auth(
     paths.into_iter().find_map(|path| read_auth_value(&path))
 }
 
+fn api_key_from_auth(auth: &Value) -> Option<&str> {
+    auth.get("OPENAI_API_KEY")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+pub fn update_provider_account(
+    codex_home: &Path,
+    account_key: &str,
+    options: UpdateProviderOptions,
+) -> Result<Registry, String> {
+    let mut registry = load_registry_for_update(codex_home)?;
+    let index = find_account_index(&registry, account_key)
+        .ok_or_else(|| "API provider account not found.".to_string())?;
+    if registry.accounts[index].auth_mode.as_deref() != Some("provider")
+        || registry.accounts[index].provider.is_none()
+    {
+        return Err("API provider account not found.".into());
+    }
+
+    let stored_auth = read_account_auth(
+        codex_home,
+        account_key,
+        registry.active_account_key.as_deref(),
+    );
+    let replacement_api_key = options
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let effective_api_key = replacement_api_key
+        .or_else(|| stored_auth.as_ref().and_then(api_key_from_auth))
+        .ok_or_else(|| "The stored API key is missing. Enter a replacement API key.".to_string())?
+        .to_string();
+
+    let old_account_key = registry.accounts[index].account_key.clone();
+    let new_account_key = if replacement_api_key.is_some() {
+        let provider = registry.accounts[index].provider.as_ref().unwrap();
+        let host = provider_host(&provider.base_url)
+            .ok_or_else(|| "The stored endpoint URL has no host.".to_string())?;
+        provider_account_key(&host, &effective_api_key)
+    } else {
+        old_account_key.clone()
+    };
+    if find_account_index(&registry, &new_account_key).is_some_and(|found| found != index) {
+        return Err("Another API provider account already uses this endpoint and API key.".into());
+    }
+
+    let replacement_model = options.model.as_deref().map(str::trim);
+    let was_active = registry.active_account_key.as_deref() == Some(account_key);
+    let was_previous = registry.previous_active_account_key.as_deref() == Some(account_key);
+    {
+        let account = &mut registry.accounts[index];
+        account.account_key = new_account_key.clone();
+        if replacement_api_key.is_some() {
+            account.account_name = Some(api_key_account_name(&effective_api_key));
+        }
+        if let Some(model) = replacement_model {
+            let provider = account.provider.as_mut().unwrap();
+            provider.model = if model.is_empty() {
+                DEFAULT_PROVIDER_MODEL.to_string()
+            } else {
+                model.to_string()
+            };
+            if provider_needs_model_catalog(provider) {
+                provider.model_reasoning_effort = None;
+            }
+        }
+    }
+    if was_active {
+        registry.active_account_key = Some(new_account_key.clone());
+    }
+    if was_previous {
+        registry.previous_active_account_key = Some(new_account_key.clone());
+    }
+
+    let mut auth = stored_auth.unwrap_or_else(|| json!({}));
+    if !auth.is_object() {
+        auth = json!({});
+    }
+    auth["OPENAI_API_KEY"] = Value::String(effective_api_key);
+    let mut serialized_auth =
+        serde_json::to_string_pretty(&auth).map_err(|error| error.to_string())?;
+    serialized_auth.push('\n');
+
+    ensure_accounts_dir(codex_home).map_err(|error| error.to_string())?;
+    write_private_file(
+        &account_auth_path(codex_home, &new_account_key),
+        &serialized_auth,
+    )
+    .map_err(|error| error.to_string())?;
+    if was_active {
+        let active_path = active_auth_path(codex_home);
+        backup_file_if_changed(
+            codex_home,
+            &active_path,
+            "auth.json",
+            Some(&serialized_auth),
+        )
+        .map_err(|error| error.to_string())?;
+        write_private_file(&active_path, &serialized_auth).map_err(|error| error.to_string())?;
+        sync_config_for_provider(codex_home, registry.accounts[index].provider.as_ref())?;
+    }
+    save_registry(codex_home, &mut registry)?;
+    if old_account_key != new_account_key {
+        let _ = remove_file_if_exists(&account_auth_path(codex_home, &old_account_key));
+    }
+    Ok(registry)
+}
+
 pub fn provider_test_options(
     codex_home: &Path,
     account_key: &str,
+    draft: Option<&UpdateProviderOptions>,
 ) -> Result<ProviderTestOptions, String> {
     let registry = load_registry(codex_home)?;
     let account = registry
@@ -1367,26 +1488,31 @@ pub fn provider_test_options(
         .provider
         .as_ref()
         .ok_or_else(|| "API provider account not found.".to_string())?;
-    let auth = read_account_auth(
-        codex_home,
-        account_key,
-        registry.active_account_key.as_deref(),
-    )
-    .ok_or_else(|| {
-        "The stored API key is missing. Add this API provider account again.".to_string()
-    })?;
-    let api_key = auth
-        .get("OPENAI_API_KEY")
-        .and_then(Value::as_str)
+    let draft_api_key = draft
+        .and_then(|options| options.api_key.as_deref())
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "The stored API key is missing. Add this API provider account again.".to_string()
-        })?;
+        .filter(|value| !value.is_empty());
+    let stored_auth = if draft_api_key.is_none() {
+        read_account_auth(
+            codex_home,
+            account_key,
+            registry.active_account_key.as_deref(),
+        )
+    } else {
+        None
+    };
+    let api_key = draft_api_key
+        .or_else(|| stored_auth.as_ref().and_then(api_key_from_auth))
+        .ok_or_else(|| "The stored API key is missing. Enter a replacement API key.".to_string())?;
+    let model = match draft.and_then(|options| options.model.as_deref()) {
+        Some(value) if value.trim().is_empty() => DEFAULT_PROVIDER_MODEL,
+        Some(value) => value.trim(),
+        None => &provider.model,
+    };
     Ok(ProviderTestOptions {
         base_url: provider.base_url.clone(),
         api_key: api_key.to_string(),
-        model: provider.model.clone(),
+        model: model.to_string(),
     })
 }
 
@@ -1852,6 +1978,314 @@ mod tests {
             auth.get("OPENAI_API_KEY").and_then(Value::as_str),
             Some("sk-test-one")
         );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_active_provider_rotates_key_and_model_without_losing_metadata() {
+        let home = temporary_home("provider-update-active");
+        let added = add_provider_account(&home, provider_options("apiz", "sk-old")).unwrap();
+        let old_key = added.active_account_key.unwrap();
+
+        let mut seeded = load_registry(&home).unwrap();
+        seeded.accounts[0]
+            .extra
+            .insert("future_account_field".into(), json!({ "kept": true }));
+        seeded.accounts[0]
+            .provider
+            .as_mut()
+            .unwrap()
+            .extra
+            .insert("future_provider_field".into(), json!(42));
+        seeded.accounts[0].last_local_rollout = Some(json!({ "path": "rollout.jsonl" }));
+        let original_created_at = seeded.accounts[0].created_at;
+        let original_last_used_at = seeded.accounts[0].last_used_at;
+        let original_activated_at = seeded.active_account_activated_at_ms;
+        save_registry(&home, &mut seeded).unwrap();
+
+        let updated = update_provider_account(
+            &home,
+            &old_key,
+            UpdateProviderOptions {
+                api_key: Some(" sk-new ".into()),
+                model: Some(" gpt-5.7 ".into()),
+            },
+        )
+        .unwrap();
+        let new_key = provider_account_key("apiz.example.com", "sk-new");
+
+        assert_eq!(updated.accounts.len(), 1);
+        assert_eq!(
+            updated.active_account_key.as_deref(),
+            Some(new_key.as_str())
+        );
+        assert_eq!(updated.previous_active_account_key, None);
+        assert_eq!(
+            updated.active_account_activated_at_ms,
+            original_activated_at
+        );
+        let account = &updated.accounts[0];
+        assert_eq!(account.account_key, new_key);
+        assert_eq!(account.created_at, original_created_at);
+        assert_eq!(account.last_used_at, original_last_used_at);
+        assert_eq!(
+            account.extra.get("future_account_field"),
+            Some(&json!({ "kept": true }))
+        );
+        assert_eq!(
+            account
+                .provider
+                .as_ref()
+                .unwrap()
+                .extra
+                .get("future_provider_field"),
+            Some(&json!(42))
+        );
+        assert_eq!(
+            account.last_local_rollout,
+            Some(json!({ "path": "rollout.jsonl" }))
+        );
+        assert_eq!(account.provider.as_ref().unwrap().model, "gpt-5.7");
+
+        assert!(!account_auth_path(&home, &old_key).exists());
+        let snapshot = read_auth_value(&account_auth_path(&home, &new_key)).unwrap();
+        assert_eq!(
+            snapshot.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-new")
+        );
+        let active_auth = read_auth_value(&active_auth_path(&home)).unwrap();
+        assert_eq!(
+            active_auth.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-new")
+        );
+        let config = fs::read_to_string(home.join("config.toml")).unwrap();
+        assert!(config.contains("model = \"gpt-5.7\""));
+        assert!(config.contains("review_model = \"gpt-5.7\""));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_active_provider_model_with_blank_key_keeps_identity_and_normalizes_reasoning() {
+        let home = temporary_home("provider-update-model");
+        let added = add_provider_account(&home, provider_options("apiz", "sk-stored")).unwrap();
+        let account_key = added.active_account_key.unwrap();
+
+        let updated = update_provider_account(
+            &home,
+            &account_key,
+            UpdateProviderOptions {
+                api_key: Some("   ".into()),
+                model: Some("deepseek-v4-pro".into()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(updated.accounts.len(), 1);
+        assert_eq!(
+            updated.active_account_key.as_deref(),
+            Some(account_key.as_str())
+        );
+        let provider = updated.accounts[0].provider.as_ref().unwrap();
+        assert_eq!(provider.model, "deepseek-v4-pro");
+        assert_eq!(provider.model_reasoning_effort, None);
+        let snapshot = read_auth_value(&account_auth_path(&home, &account_key)).unwrap();
+        assert_eq!(
+            snapshot.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-stored")
+        );
+        let config = fs::read_to_string(home.join("config.toml")).unwrap();
+        assert!(config.contains("model = \"deepseek-v4-pro\""));
+        assert!(config.contains("model_catalog_json"));
+        assert!(!config.contains("model_reasoning_effort"));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_active_provider_blank_model_resets_to_default() {
+        let home = temporary_home("provider-update-default-model");
+        let mut add_options = provider_options("apiz", "sk-stored");
+        add_options.model = "gpt-old".into();
+        let added = add_provider_account(&home, add_options).unwrap();
+        let account_key = added.active_account_key.unwrap();
+
+        let updated = update_provider_account(
+            &home,
+            &account_key,
+            UpdateProviderOptions {
+                api_key: None,
+                model: Some("   ".into()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(updated.accounts.len(), 1);
+        assert_eq!(
+            updated.active_account_key.as_deref(),
+            Some(account_key.as_str())
+        );
+        assert_eq!(
+            updated.accounts[0].provider.as_ref().unwrap().model,
+            DEFAULT_PROVIDER_MODEL
+        );
+        let config = fs::read_to_string(home.join("config.toml")).unwrap();
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(!config.contains("model = \"gpt-old\""));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_inactive_provider_rekeys_previous_without_switching_active_account() {
+        let home = temporary_home("provider-update-inactive");
+        let first = add_provider_account(&home, provider_options("one", "sk-one")).unwrap();
+        let first_key = first.active_account_key.unwrap();
+        let second = add_provider_account(&home, provider_options("two", "sk-two")).unwrap();
+        let second_key = second.active_account_key.unwrap();
+        assert_eq!(
+            second.previous_active_account_key.as_deref(),
+            Some(first_key.as_str())
+        );
+        let active_auth_before = fs::read(active_auth_path(&home)).unwrap();
+        let config_before = fs::read(home.join("config.toml")).unwrap();
+        let activated_at_before = second.active_account_activated_at_ms;
+
+        let updated = update_provider_account(
+            &home,
+            &first_key,
+            UpdateProviderOptions {
+                api_key: Some("sk-one-new".into()),
+                model: Some("gpt-5.7".into()),
+            },
+        )
+        .unwrap();
+        let new_first_key = provider_account_key("one.example.com", "sk-one-new");
+
+        assert_eq!(updated.accounts.len(), 2);
+        assert_eq!(
+            updated.active_account_key.as_deref(),
+            Some(second_key.as_str())
+        );
+        assert_eq!(
+            updated.previous_active_account_key.as_deref(),
+            Some(new_first_key.as_str())
+        );
+        assert_eq!(updated.active_account_activated_at_ms, activated_at_before);
+        assert_eq!(
+            fs::read(active_auth_path(&home)).unwrap(),
+            active_auth_before
+        );
+        assert_eq!(fs::read(home.join("config.toml")).unwrap(), config_before);
+        assert!(!account_auth_path(&home, &first_key).exists());
+        assert!(account_auth_path(&home, &new_first_key).exists());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_provider_rejects_account_key_collisions_without_mutating_storage() {
+        let home = temporary_home("provider-update-collision");
+        let first = add_provider_account(&home, provider_options("same", "sk-one")).unwrap();
+        let first_key = first.active_account_key.unwrap();
+        let second = add_provider_account(&home, provider_options("same", "sk-two")).unwrap();
+        let second_key = second.active_account_key.unwrap();
+        let registry_before = fs::read(registry_path(&home)).unwrap();
+        let first_auth_before = fs::read(account_auth_path(&home, &first_key)).unwrap();
+        let second_auth_before = fs::read(account_auth_path(&home, &second_key)).unwrap();
+
+        let error = update_provider_account(
+            &home,
+            &first_key,
+            UpdateProviderOptions {
+                api_key: Some("sk-two".into()),
+                model: Some("gpt-5.7".into()),
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("already uses this endpoint and API key"));
+        assert_eq!(fs::read(registry_path(&home)).unwrap(), registry_before);
+        assert_eq!(
+            fs::read(account_auth_path(&home, &first_key)).unwrap(),
+            first_auth_before
+        );
+        assert_eq!(
+            fs::read(account_auth_path(&home, &second_key)).unwrap(),
+            second_auth_before
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn updating_provider_rejects_missing_and_non_provider_accounts() {
+        let home = temporary_home("provider-update-invalid-target");
+        let mut registry = Registry::default();
+        registry
+            .accounts
+            .push(base_account("chatgpt-account".into(), "chatgpt", None));
+        save_registry(&home, &mut registry).unwrap();
+
+        let missing =
+            update_provider_account(&home, "missing-account", UpdateProviderOptions::default())
+                .unwrap_err();
+        assert_eq!(missing, "API provider account not found.");
+        let non_provider =
+            update_provider_account(&home, "chatgpt-account", UpdateProviderOptions::default())
+                .unwrap_err();
+        assert_eq!(non_provider, "API provider account not found.");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn provider_update_and_draft_test_can_repair_missing_credentials() {
+        let home = temporary_home("provider-update-repair");
+        let added = add_provider_account(&home, provider_options("repair", "sk-old")).unwrap();
+        let account_key = added.active_account_key.unwrap();
+        fs::remove_file(account_auth_path(&home, &account_key)).unwrap();
+        fs::remove_file(active_auth_path(&home)).unwrap();
+
+        let missing_error =
+            update_provider_account(&home, &account_key, UpdateProviderOptions::default())
+                .unwrap_err();
+        assert!(missing_error.contains("Enter a replacement API key"));
+
+        let draft = UpdateProviderOptions {
+            api_key: Some("sk-draft".into()),
+            model: Some("gpt-draft".into()),
+        };
+        let test_options = provider_test_options(&home, &account_key, Some(&draft)).unwrap();
+        assert_eq!(test_options.api_key, "sk-draft");
+        assert_eq!(test_options.model, "gpt-draft");
+
+        let updated = update_provider_account(&home, &account_key, draft).unwrap();
+        let new_key = provider_account_key("repair.example.com", "sk-draft");
+        assert_eq!(
+            updated.active_account_key.as_deref(),
+            Some(new_key.as_str())
+        );
+        assert!(account_auth_path(&home, &new_key).exists());
+        assert_eq!(
+            read_auth_value(&active_auth_path(&home))
+                .unwrap()
+                .get("OPENAI_API_KEY")
+                .and_then(Value::as_str),
+            Some("sk-draft")
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn provider_test_draft_blank_key_uses_stored_key_and_blank_model_uses_default() {
+        let home = temporary_home("provider-test-draft");
+        let mut add_options = provider_options("draft", "sk-stored");
+        add_options.model = "gpt-old".into();
+        let added = add_provider_account(&home, add_options).unwrap();
+        let account_key = added.active_account_key.unwrap();
+        let draft = UpdateProviderOptions {
+            api_key: Some("  ".into()),
+            model: Some("  ".into()),
+        };
+
+        let options = provider_test_options(&home, &account_key, Some(&draft)).unwrap();
+        assert_eq!(options.api_key, "sk-stored");
+        assert_eq!(options.model, DEFAULT_PROVIDER_MODEL);
         let _ = fs::remove_dir_all(home);
     }
 

@@ -8,9 +8,6 @@ dist/
 # IDE/Editor
 .idea/
 
-# Desktop app dependencies
-desktop/node_modules/
-
 # Site local dependencies and Worker state
 site/node_modules/
 site/.wrangler/

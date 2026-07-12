@@ -98,8 +98,16 @@
   </div>
 
   <div id="api-form" class="api-form hidden">
-    <div class="api-form-title" data-i18n="apiForm.title">Add API provider account</div>
+    <div id="api-form-title" class="api-form-title" data-i18n="apiForm.title">Add API provider account</div>
     <div class="api-form-grid">
+      <label for="api-provider" data-i18n="apiForm.provider">Provider</label>
+      <select id="api-provider" class="api-provider-select">
+        <option value="openai-compatible" data-i18n="apiForm.provider.openai">OpenAI Compatible</option>
+        <option value="byteplus-ark" data-i18n="apiForm.provider.byteplusArk">BytePlus Ark</option>
+        <option value="claude-responses" data-i18n="apiForm.provider.claudeResponses">Claude via Responses Gateway</option>
+        <option value="custom-responses" data-i18n="apiForm.provider.customResponses">Custom Responses API</option>
+      </select>
+      <div id="api-provider-hint" class="api-provider-hint"></div>
       <label for="api-base-url" data-i18n="apiForm.endpoint">Endpoint</label>
       <input id="api-base-url" type="text" placeholder="https://codex.example.com" spellcheck="false" />
       <label for="api-key" data-i18n="apiForm.apiKey">API key</label>
@@ -107,7 +115,7 @@
       <label for="api-name" data-i18n="apiForm.name">Name</label>
       <input id="api-name" type="text" data-i18n-placeholder="apiForm.name.placeholder" placeholder="optional, e.g. apiz" spellcheck="false" />
       <label for="api-model" data-i18n="apiForm.model">Model</label>
-      <input id="api-model" type="text" data-i18n-placeholder="apiForm.model.placeholder" placeholder="optional, e.g. gpt-5.5" spellcheck="false" />
+      <input id="api-model" type="text" data-i18n-placeholder="apiForm.model.placeholder" placeholder="optional, e.g. gpt-5.6-sol" spellcheck="false" />
     </div>
     <div id="api-test-status" class="api-test-status hidden"></div>
     <div class="api-form-actions">
@@ -261,7 +269,7 @@
   </div>
 
   <script src="i18n.js"></script>
-  <script src="runtime-bridge.js"></script>
+  <script src="tauri-bridge.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
