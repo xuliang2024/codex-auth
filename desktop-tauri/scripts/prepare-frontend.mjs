@@ -3,18 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repositoryRoot = path.resolve(root, "..");
 const output = path.join(root, "frontend-dist");
 
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(path.join(output, "build"), { recursive: true });
-fs.cpSync(path.join(repositoryRoot, "desktop", "renderer"), path.join(output, "renderer"), {
+fs.cpSync(path.join(root, "renderer"), path.join(output, "renderer"), {
   recursive: true,
 });
 fs.copyFileSync(
-  path.join(repositoryRoot, "desktop", "build", "icon.svg"),
+  path.join(root, "src-tauri", "icons", "icon.svg"),
   path.join(output, "build", "icon.svg"),
 );
 
-console.log("Prepared the shared desktop frontend for Tauri.");
-
+console.log("Prepared the Tauri desktop frontend.");

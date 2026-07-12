@@ -1,8 +1,14 @@
 (() => {
-  if (window.codexAuth || !window.__TAURI__) return;
+  // The deterministic visual test injects its own API before this script runs.
+  if (window.codexAuth) return;
 
-  const { invoke } = window.__TAURI__.core;
-  const { listen } = window.__TAURI__.event;
+  const tauri = window.__TAURI__;
+  if (!tauri?.core?.invoke || !tauri?.event?.listen) {
+    throw new Error("Accounts for Codex requires the Tauri desktop runtime.");
+  }
+
+  const { invoke } = tauri.core;
+  const { listen } = tauri.event;
   const platformText = String(navigator.platform || navigator.userAgent || "").toLowerCase();
   const platform = platformText.includes("mac")
     ? "darwin"
@@ -25,7 +31,11 @@
     loginStart: () => call("login_start"),
     loginApi: (opts) => call("login_api", { opts }),
     testApiEndpoint: (opts) => call("test_api_endpoint", { opts }),
-    testProviderAccount: (accountKey) => call("test_provider_account", { accountKey }),
+    testProviderAccount: (accountKey, opts) => call(
+      "test_provider_account",
+      opts === undefined ? { accountKey } : { accountKey, opts },
+    ),
+    updateProviderAccount: (accountKey, opts) => call("update_provider_account", { accountKey, opts }),
     loginCancel: () => call("login_cancel"),
     removeAccount: (accountKey) => call("remove_account", { accountKey }),
     exportAccounts: (opts) => call("export_accounts", { opts }),
@@ -48,4 +58,3 @@
     },
   };
 })();
-

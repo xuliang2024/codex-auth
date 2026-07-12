@@ -145,16 +145,16 @@ Other commands:
   account also runs `removeProviderBlocks`.
 - Help text updated (English only, per repo rules).
 
-## 6. Desktop app (`desktop/`)
+## 6. Tauri desktop app (`desktop-tauri/`)
 
-- "Add Account" becomes a split action: **ChatGPT sign-in** (existing flow) and
-  **API endpoint** (small form: endpoint URL, API key, optional name), which
-  invokes `codex-auth login --api --base-url ... --key ...` via the existing
-  `runCli` helper.
-- Provider account cards: `API` badge + endpoint host, no usage bars, excluded
-  from the expired-session check in `check-accounts` (they have no OAuth
-  session; optionally show a "reachable/unreachable" hint from a HEAD probe).
-- Switch/remove buttons work unchanged since they shell out to the CLI.
+- "Add Account" is a split action: **ChatGPT sign-in** and **API endpoint**. The
+  API form accepts an endpoint URL, API key, optional name, and model, then
+  invokes the native Tauri `login_api` command backed by the Rust registry.
+- Provider account cards show an `API` badge and endpoint host without OAuth
+  usage bars or expired-session checks. The native `test_provider_account`
+  command handles explicit endpoint tests.
+- Provider edits, switching, and removal use native Tauri commands; the desktop
+  application does not shell out to the CLI for registry operations.
 
 ## 7. Edge cases
 

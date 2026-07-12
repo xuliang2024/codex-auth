@@ -3,13 +3,15 @@
 - Status: Accepted
 - Date: 2026-07-11
 - Scope: Tauri desktop 0.2.x
+- Retirement update: The Electron implementation was retired and removed on
+  2026-07-12. Tauri is the sole desktop implementation.
 
 ## Context
 
-The CLI, Electron app, and Tauri app currently implement overlapping account
-registry behavior in Zig, JavaScript, and Rust. The Tauri implementation is
-already integrated with OAuth, token refresh, provider endpoint checks, file
-watching, import/export, and the native command mutex.
+At the time of this decision, the CLI, Electron app, and Tauri app implemented
+overlapping account registry behavior in Zig, JavaScript, and Rust. The Tauri
+implementation was already integrated with OAuth, token refresh, provider
+endpoint checks, file watching, import/export, and the native command mutex.
 
 Replacing the Rust implementation with a Zig sidecar would require a new
 structured, non-interactive protocol. Tauri also requires one external binary
@@ -33,7 +35,6 @@ The implementation ownership is:
   behavior.
 - Rust owns the Tauri command boundary and implements only the behavior needed
   by the desktop app while remaining compatible with Zig-managed data.
-- The Electron JavaScript port is maintenance-only until Electron is retired.
 
 Sensitive operations remain behind Rust commands. The renderer does not gain
 Shell plugin access or a general process-execution capability.
@@ -46,8 +47,8 @@ Shell plugin access or a general process-execution capability.
 3. Registry writes remain serialized by the native mutex, atomic, private on
    Unix, and backed up before replacement.
 4. Changes to the schema version, snapshot naming, provider defaults, managed
-   TOML markers, or import/export format must update every active
-   implementation and its tests in the same change.
+   TOML markers, or import/export format must update the Zig CLI and Tauri Rust
+   implementations and their tests in the same change.
 5. Before the next schema version, add shared fixture-driven compatibility
    tests that are consumed by both Zig and Rust.
 

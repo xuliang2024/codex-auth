@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "prepare": "node scripts/prepare-frontend.mjs",
-    "test": "npm run test:bridge",
-    "test:bridge": "node --test scripts/*.test.mjs",
+    "test": "npm run test:frontend",
+    "test:frontend": "node --test scripts/*.test.mjs",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "start": "node scripts/run-tauri.mjs dev",
     "build": "node scripts/run-tauri.mjs build",

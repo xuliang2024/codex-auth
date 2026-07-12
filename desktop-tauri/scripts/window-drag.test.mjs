@@ -11,7 +11,7 @@ test("Tauri keeps the window drag command and marks the full header as draggable
     fs.readFileSync(path.join(projectRoot, "src-tauri/capabilities/default.json"), "utf8"),
   );
   const renderer = fs.readFileSync(
-    path.resolve(projectRoot, "..", "desktop/renderer/index.html"),
+    path.join(projectRoot, "renderer", "index.html"),
     "utf8",
   );
 

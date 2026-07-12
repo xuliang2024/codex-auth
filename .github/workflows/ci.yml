@@ -113,7 +113,7 @@ jobs:
         working-directory: desktop-tauri
         run: npm ci
 
-      - name: Test runtime bridge
+      - name: Test Tauri frontend
         working-directory: desktop-tauri
         run: npm test
 

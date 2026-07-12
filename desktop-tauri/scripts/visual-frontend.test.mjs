@@ -20,13 +20,13 @@ test("visual regression frontend injects its fixture before application startup"
   );
   const fixtureIndex = visualIndex.indexOf('src="visual-fixture.js"');
   const i18nIndex = visualIndex.indexOf('src="i18n.js"');
-  const bridgeIndex = visualIndex.indexOf('src="runtime-bridge.js"');
+  const bridgeIndex = visualIndex.indexOf('src="tauri-bridge.js"');
   assert.ok(fixtureIndex >= 0);
   assert.ok(fixtureIndex < i18nIndex);
   assert.ok(i18nIndex < bridgeIndex);
 
   const productionIndex = fs.readFileSync(
-    path.resolve(projectRoot, "..", "desktop", "renderer", "index.html"),
+    path.join(projectRoot, "renderer", "index.html"),
     "utf8",
   );
   assert.equal(productionIndex.includes("visual-fixture.js"), false);

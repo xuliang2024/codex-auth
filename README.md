@@ -1,6 +1,6 @@
 # Accounts for Codex [![latest release](https://img.shields.io/github/v/release/xuliang2024/codex-auth?sort=semver&label=latest)](https://github.com/xuliang2024/codex-auth/releases/latest) [![latest pre-release](https://img.shields.io/github/v/release/xuliang2024/codex-auth?include_prereleases&sort=semver&filter=*-*&label=pre-release)](https://github.com/xuliang2024/codex-auth/releases)
 
-**Accounts for Codex** is an Electron desktop app for managing multiple Codex accounts in one place. It gives you a visual account dashboard, usage status, import and export tools, and one-click switching for ChatGPT accounts and custom API providers.
+**Accounts for Codex** is a Tauri desktop app for managing multiple Codex accounts in one place. It gives you a visual account dashboard, usage status, import and export tools, and one-click switching for ChatGPT accounts and custom API providers.
 
 ![Accounts for Codex account dashboard](./docs/assets/accounts-for-codex-dashboard.png)
 
@@ -33,19 +33,13 @@ Community: thanks to [LINUX DO](https://linux.do/) for discussion and feedback.
 
 Download the latest desktop build from [GitHub Releases](https://github.com/xuliang2024/codex-auth/releases/latest).
 
-To run the Electron app from source:
+To run the desktop app from source:
 
 ```shell
 git clone https://github.com/xuliang2024/codex-auth.git
-cd codex-auth/desktop
-npm install
+cd codex-auth/desktop-tauri
+npm ci
 npm start
-```
-
-For local source runs, install the helper CLI that the Electron app uses:
-
-```shell
-npm install -g @loongphy/codex-auth
 ```
 
 The desktop app reads the same `~/.codex/accounts/registry.json` account registry as the helper CLI, so accounts added in either place can appear in both.

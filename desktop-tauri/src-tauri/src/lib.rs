@@ -20,7 +20,7 @@ use tauri_plugin_opener::OpenerExt as _;
 
 use crate::network::TestApiOptions;
 use crate::oauth::{LoginCoordinator, OAuthOutcome};
-use crate::registry::AddProviderOptions;
+use crate::registry::{AddProviderOptions, UpdateProviderOptions};
 
 struct AppState {
     codex_home: PathBuf,
@@ -334,12 +334,17 @@ async fn test_api_endpoint(app: AppHandle, opts: Option<TestApiOptions>) -> Valu
 }
 
 #[tauri::command]
-async fn test_provider_account(app: AppHandle, account_key: String) -> Value {
+async fn test_provider_account(
+    app: AppHandle,
+    account_key: String,
+    opts: Option<UpdateProviderOptions>,
+) -> Value {
     let state = app.state::<AppState>();
-    let options = match registry::provider_test_options(&state.codex_home, &account_key) {
-        Ok(options) => options,
-        Err(error) => return failure(error),
-    };
+    let options =
+        match registry::provider_test_options(&state.codex_home, &account_key, opts.as_ref()) {
+            Ok(options) => options,
+            Err(error) => return failure(error),
+        };
     network::test_api_endpoint(
         &state.client,
         TestApiOptions {
@@ -364,6 +369,25 @@ fn login_api(state: State<'_, AppState>, opts: Option<AddProviderOptions>) -> Va
         Err(_) => return failure("Account storage is busy."),
     };
     match registry::add_provider_account(&state.codex_home, options) {
+        Ok(registry) => ok_registry(registry),
+        Err(error) => failure(error),
+    }
+}
+
+#[tauri::command]
+fn update_provider_account(
+    state: State<'_, AppState>,
+    account_key: String,
+    opts: Option<UpdateProviderOptions>,
+) -> Value {
+    let Some(options) = opts else {
+        return failure("API provider update options are required.");
+    };
+    let _guard = match state.registry_lock.lock() {
+        Ok(guard) => guard,
+        Err(_) => return failure("Account storage is busy."),
+    };
+    match registry::update_provider_account(&state.codex_home, &account_key, options) {
         Ok(registry) => ok_registry(registry),
         Err(error) => failure(error),
     }
@@ -651,6 +675,7 @@ pub fn run() {
             test_api_endpoint,
             test_provider_account,
             login_api,
+            update_provider_account,
             remove_account,
             export_accounts,
             export_accounts_share,

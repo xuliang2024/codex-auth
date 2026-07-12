@@ -47,7 +47,7 @@
           base_url: "https://codex.example.com",
           wire_api: "responses",
           requires_openai_auth: true,
-          model: "gpt-5.5",
+          model: "gpt-5.6-sol",
         },
       },
       {
@@ -109,6 +109,7 @@
     loginApi: unsupported,
     testApiEndpoint: unsupported,
     testProviderAccount: unsupported,
+    updateProviderAccount: unsupported,
     loginCancel: unsupported,
     removeAccount: unsupported,
     exportAccounts: unsupported,

@@ -13,7 +13,13 @@ After modifying any `.zig` file, always run `zig build run -- list` to verify th
 # Release Process
 
 - When updating and pushing a release version, always follow [docs/release.md](./docs/release.md).
-- When packaging and publishing the Electron desktop app, follow [docs/desktop-release.md](./docs/desktop-release.md).
+- When packaging and publishing the Tauri desktop app, follow [docs/desktop-release.md](./docs/desktop-release.md).
+
+# Desktop
+
+- `desktop-tauri/` is the sole supported desktop implementation.
+- The former Electron implementation under `desktop/` was retired and removed on 2026-07-12. Do not restore it or route desktop changes there.
+- Follow [docs/desktop-development.md](./docs/desktop-development.md) for Tauri development, validation, and test packaging.
 
 # Docs
 

@@ -34,9 +34,9 @@
     "targets": "all",
     "category": "DeveloperTool",
     "icon": [
-      "../../desktop/build/icon.png",
-      "../../desktop/build/icon.icns",
-      "../../desktop/build/icon.ico"
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "macOS": {
       "minimumSystemVersion": "12.0"

@@ -4,20 +4,29 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import {
-  CURRENT_SCHEMA_VERSION,
-  DEFAULT_PROVIDER_MODEL,
-  DEFAULT_PROVIDER_REASONING_EFFORT,
-  apiKeyAccountName,
-  providerAccountKey,
-} from "../desktop/lib/registry.js";
-import { EXPORT_FILE_TYPE, EXPORT_FILE_VERSION } from "../desktop/lib/export-accounts.js";
-
+const CURRENT_SCHEMA_VERSION = 5;
+const EXPORT_FILE_TYPE = "codex-auth-accounts";
+const EXPORT_FILE_VERSION = 1;
+const DEFAULT_PROVIDER_MODEL = "gpt-5.6-sol";
+const DEFAULT_PROVIDER_REASONING_EFFORT = "medium";
 const DEFAULT_SHARE_API_BASE = "https://codexhub.uk";
 const DEFAULT_PROVIDER_BASE_URL = "https://codex.apiz.ai";
 const DEFAULT_PROVIDER_ID = "apiz";
 const DEFAULT_TTL_DAYS = 7;
 const KEY_RE = /sk-[A-Za-z0-9_-]{8,}/g;
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function providerAccountKey(host, apiKey) {
+  return `provider::${host}::${sha256Hex(apiKey)}`;
+}
+
+function apiKeyAccountName(apiKey) {
+  const hex = sha256Hex(apiKey);
+  return `sk-${hex.slice(0, 5)}***${hex.slice(-4)}`;
+}
 
 function usage() {
   return `Usage:

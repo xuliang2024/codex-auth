@@ -37,7 +37,7 @@ test("buildApizExportPayload creates a single provider account export", () => {
   assert.equal(account.auth_mode, "provider");
   assert.equal(account.provider.id, "apiz");
   assert.equal(account.provider.base_url, "https://codex.apiz.ai");
-  assert.equal(account.provider.model, "gpt-5.5");
+  assert.equal(account.provider.model, "gpt-5.6-sol");
   assert.equal(account.provider.model_reasoning_effort, "medium");
   assert.equal(payload.registry.active_account_key, account.account_key);
   assert.deepEqual(payload.auths[account.account_key], { OPENAI_API_KEY: apiKey });
