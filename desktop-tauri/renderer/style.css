@@ -998,6 +998,21 @@ body.platform-linux .titlebar {
   border-color: rgba(107, 160, 255, 0.74);
 }
 
+.choice-option-sub2api {
+  background: rgba(67, 184, 145, 0.1);
+  border-color: rgba(67, 184, 145, 0.45);
+}
+
+.choice-option-sub2api:hover {
+  background: rgba(67, 184, 145, 0.16);
+  border-color: rgba(93, 211, 169, 0.68);
+}
+
+.choice-option-sub2api .choice-option-icon {
+  background: rgba(67, 184, 145, 0.2);
+  color: #73dcb7;
+}
+
 .choice-option-icon {
   width: 44px;
   height: 44px;

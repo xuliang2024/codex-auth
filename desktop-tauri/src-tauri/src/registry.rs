@@ -515,6 +515,27 @@ fn decode_jwt_claims(token: &str) -> Option<Value> {
     serde_json::from_slice(&decoded).ok()
 }
 
+fn ensure_chatgpt_refresh_metadata(auth: &mut Value) -> bool {
+    if auth.get("auth_mode").and_then(Value::as_str) != Some("chatgpt")
+        || auth
+            .get("last_refresh")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+    {
+        return false;
+    }
+    let refreshed_at = auth
+        .pointer("/tokens/access_token")
+        .and_then(Value::as_str)
+        .and_then(decode_jwt_claims)
+        .and_then(|claims| claims.get("iat").and_then(Value::as_i64))
+        .and_then(|timestamp| chrono::DateTime::<Utc>::from_timestamp(timestamp, 0))
+        .map(|timestamp| timestamp.to_rfc3339())
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    auth["last_refresh"] = Value::String(refreshed_at);
+    true
+}
+
 pub fn parse_chatgpt_identity(auth: &Value) -> Option<ChatgptIdentity> {
     let id_token = auth.pointer("/tokens/id_token")?.as_str()?;
     let claims = decode_jwt_claims(id_token)?;
@@ -1041,7 +1062,14 @@ fn activate_account(
     if !source.exists() {
         return Err("Stored auth snapshot for this account is missing.".into());
     }
-    let content = fs::read_to_string(&source).map_err(|error| error.to_string())?;
+    let mut content = fs::read_to_string(&source).map_err(|error| error.to_string())?;
+    if let Ok(mut auth) = serde_json::from_str::<Value>(&content) {
+        if ensure_chatgpt_refresh_metadata(&mut auth) {
+            content = serde_json::to_string_pretty(&auth).map_err(|error| error.to_string())?;
+            content.push('\n');
+            write_private_file(&source, &content).map_err(|error| error.to_string())?;
+        }
+    }
     let destination = active_auth_path(codex_home);
     backup_file_if_changed(codex_home, &destination, "auth.json", Some(&content))
         .map_err(|error| error.to_string())?;
@@ -1536,7 +1564,126 @@ pub fn persist_usages(
     Ok(registry)
 }
 
-pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
+fn non_empty_string_field<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn convert_sub2api_payload(payload: &Value) -> Result<Value, String> {
+    if payload
+        .get("version")
+        .and_then(Value::as_u64)
+        .is_some_and(|version| version > 1)
+    {
+        return Err("This sub2api export was created by a newer app version.".into());
+    }
+    let source_accounts = payload
+        .get("accounts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "This file is not a valid sub2api account export.".to_string())?;
+    let mut accounts = Vec::with_capacity(source_accounts.len());
+    let mut auths = Map::new();
+    for source_account in source_accounts {
+        let Some(source_account) = source_account.as_object() else {
+            accounts.push(Value::Null);
+            continue;
+        };
+        let is_openai_oauth = non_empty_string_field(source_account, "platform")
+            .is_some_and(|value| value.eq_ignore_ascii_case("openai"))
+            && non_empty_string_field(source_account, "type")
+                .is_some_and(|value| value.eq_ignore_ascii_case("oauth"));
+        let Some(credentials) = source_account
+            .get("credentials")
+            .and_then(Value::as_object)
+            .filter(|_| is_openai_oauth)
+        else {
+            accounts.push(Value::Null);
+            continue;
+        };
+        let Some(id_token) = non_empty_string_field(credentials, "id_token") else {
+            accounts.push(Value::Null);
+            continue;
+        };
+        let Some(access_token) = non_empty_string_field(credentials, "access_token") else {
+            accounts.push(Value::Null);
+            continue;
+        };
+        let refresh_token = non_empty_string_field(credentials, "refresh_token");
+        let mut auth = json!({
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "id_token": id_token,
+                "access_token": access_token,
+                "account_id": null
+            }
+        });
+        if let Some(refresh_token) = refresh_token {
+            auth["tokens"]["refresh_token"] = Value::String(refresh_token.to_string());
+        }
+        let Some(identity) = parse_chatgpt_identity(&auth) else {
+            accounts.push(Value::Null);
+            continue;
+        };
+        auth["tokens"]["account_id"] = Value::String(identity.account_id.clone());
+
+        let email = identity
+            .email
+            .clone()
+            .or_else(|| {
+                non_empty_string_field(credentials, "email").map(|value| value.to_lowercase())
+            })
+            .unwrap_or_default();
+        let alias = non_empty_string_field(source_account, "name")
+            .filter(|name| !name.eq_ignore_ascii_case(&email))
+            .unwrap_or_default()
+            .to_string();
+        let account = Account {
+            chatgpt_account_id: identity.account_id,
+            chatgpt_user_id: identity.user_id,
+            email,
+            alias,
+            plan: identity.plan,
+            ..base_account(identity.record_key.clone(), "chatgpt", None)
+        };
+        let account_value = serde_json::to_value(account)
+            .map_err(|error| format!("Failed to convert sub2api account data: {error}"))?;
+        accounts.push(account_value);
+        auths.insert(identity.record_key, auth);
+    }
+    Ok(json!({
+        "type": "codex-auth-accounts",
+        "version": 1,
+        "registry": { "accounts": accounts },
+        "auths": auths
+    }))
+}
+
+fn merge_sub2api_account(existing: &mut Account, incoming: Account) {
+    existing.chatgpt_account_id = incoming.chatgpt_account_id;
+    existing.chatgpt_user_id = incoming.chatgpt_user_id;
+    existing.email = incoming.email;
+    if !incoming.alias.is_empty() {
+        existing.alias = incoming.alias;
+    }
+    if incoming.plan.is_some() {
+        existing.plan = incoming.plan;
+    }
+    existing.auth_mode = incoming.auth_mode;
+    existing.provider = None;
+}
+
+pub fn import_payload(codex_home: &Path, mut payload: Value) -> Value {
+    let is_sub2api = payload.get("type").and_then(Value::as_str) == Some("sub2api-data");
+    if is_sub2api {
+        payload = match convert_sub2api_payload(&payload) {
+            Ok(payload) => payload,
+            Err(error) => return json!({ "ok": false, "error": error }),
+        };
+    }
     if payload.get("type").and_then(Value::as_str) != Some("codex-auth-accounts")
         || !payload
             .pointer("/registry/accounts")
@@ -1582,10 +1729,15 @@ pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
             skipped += 1;
             continue;
         };
-        let Some(auth) = auths.get(&account_key).filter(|value| value.is_object()) else {
+        let Some(mut auth) = auths
+            .get(&account_key)
+            .filter(|value| value.is_object())
+            .cloned()
+        else {
             skipped += 1;
             continue;
         };
+        ensure_chatgpt_refresh_metadata(&mut auth);
         let account: Account = match serde_json::from_value(account_value) {
             Ok(account) => account,
             Err(_) => {
@@ -1593,7 +1745,7 @@ pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
                 continue;
             }
         };
-        let mut serialized = match serde_json::to_string_pretty(auth) {
+        let mut serialized = match serde_json::to_string_pretty(&auth) {
             Ok(value) => value,
             Err(error) => {
                 return json!({ "ok": false, "error": format!("Failed to serialize auth: {error}") })
@@ -1609,7 +1761,11 @@ pub fn import_payload(codex_home: &Path, payload: Value) -> Value {
             let _ = write_private_file(&active_auth_path(codex_home), &serialized);
         }
         if let Some(index) = find_account_index(&registry, &account_key) {
-            registry.accounts[index] = account;
+            if is_sub2api {
+                merge_sub2api_account(&mut registry.accounts[index], account);
+            } else {
+                registry.accounts[index] = account;
+            }
             updated += 1;
         } else {
             registry.accounts.push(account);
@@ -1956,6 +2112,173 @@ mod tests {
             .model
             .is_empty());
         assert!(account_auth_path(&home, "imported-account").exists());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn import_accepts_sub2api_openai_oauth_accounts() {
+        let home = temporary_home("sub2api-import");
+        let id_token = fake_id_token("person@example.com", "person-user", "person-account");
+        let payload = json!({
+            "type": "sub2api-data",
+            "version": 1,
+            "exported_at": "2026-07-23T13:28:03Z",
+            "proxies": [],
+            "accounts": [
+                {
+                    "name": "Primary",
+                    "platform": "openai",
+                    "type": "oauth",
+                    "credentials": {
+                        "access_token": "sub2-access-token",
+                        "expires_at": "2026-08-01T00:00:00Z",
+                        "refresh_token": "sub2-refresh-token",
+                        "id_token": id_token,
+                        "email": "person@example.com",
+                        "account_id": "person-account",
+                        "chatgpt_account_id": "person-account"
+                    },
+                    "concurrency": 10,
+                    "priority": 1,
+                    "rate_multiplier": 1,
+                    "auto_pause_on_expired": true
+                },
+                {
+                    "name": "Unsupported",
+                    "platform": "other",
+                    "type": "oauth",
+                    "credentials": {}
+                }
+            ]
+        });
+
+        let result = import_payload(&home, payload);
+
+        assert_eq!(result.get("ok").and_then(Value::as_bool), Some(true));
+        assert_eq!(result.get("added").and_then(Value::as_u64), Some(1));
+        assert_eq!(result.get("updated").and_then(Value::as_u64), Some(0));
+        assert_eq!(result.get("skipped").and_then(Value::as_u64), Some(1));
+        let imported = load_registry(&home).unwrap();
+        assert_eq!(imported.accounts.len(), 1);
+        assert_eq!(
+            imported.accounts[0].account_key,
+            "person-user::person-account"
+        );
+        assert_eq!(imported.accounts[0].email, "person@example.com");
+        assert_eq!(imported.accounts[0].alias, "Primary");
+        assert_eq!(imported.accounts[0].auth_mode.as_deref(), Some("chatgpt"));
+        assert_eq!(imported.accounts[0].plan.as_deref(), Some("plus"));
+        let auth =
+            read_auth_value(&account_auth_path(&home, "person-user::person-account")).unwrap();
+        assert_eq!(
+            auth.pointer("/tokens/access_token").and_then(Value::as_str),
+            Some("sub2-access-token")
+        );
+        assert_eq!(
+            auth.pointer("/tokens/refresh_token")
+                .and_then(Value::as_str),
+            Some("sub2-refresh-token")
+        );
+        assert_eq!(
+            auth.pointer("/tokens/account_id").and_then(Value::as_str),
+            Some("person-account")
+        );
+        assert!(auth
+            .get("last_refresh")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty()));
+
+        let snapshot_path = account_auth_path(&home, "person-user::person-account");
+        let mut snapshot_without_refresh = auth;
+        snapshot_without_refresh
+            .as_object_mut()
+            .unwrap()
+            .remove("last_refresh");
+        write_private_file(
+            &snapshot_path,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&snapshot_without_refresh).unwrap()
+            ),
+        )
+        .unwrap();
+
+        switch_account(&home, "person-user::person-account").unwrap();
+
+        let active_path = active_auth_path(&home);
+        for path in [&snapshot_path, &active_path] {
+            let repaired = read_auth_value(path).unwrap();
+            assert!(repaired
+                .get("last_refresh")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty()));
+        }
+
+        let mut existing = load_registry(&home).unwrap();
+        existing.accounts[0].alias = "Local alias".into();
+        existing.accounts[0].last_usage = Some(json!({ "plan_type": "plus" }));
+        existing.accounts[0].last_usage_at = Some(123);
+        save_registry(&home, &mut existing).unwrap();
+        let updated_payload = json!({
+            "type": "sub2api-data",
+            "version": 1,
+            "accounts": [{
+                "name": "person@example.com",
+                "platform": "openai",
+                "type": "oauth",
+                "credentials": {
+                    "access_token": "updated-access-token",
+                    "refresh_token": "updated-refresh-token",
+                    "id_token": fake_id_token(
+                        "person@example.com",
+                        "person-user",
+                        "person-account"
+                    ),
+                    "email": "person@example.com",
+                    "account_id": "person-account",
+                    "chatgpt_account_id": "person-account"
+                }
+            }]
+        });
+
+        let updated_result = import_payload(&home, updated_payload);
+
+        assert_eq!(
+            updated_result.get("updated").and_then(Value::as_u64),
+            Some(1)
+        );
+        let updated = load_registry(&home).unwrap();
+        assert_eq!(updated.accounts[0].alias, "Local alias");
+        assert_eq!(updated.accounts[0].last_usage_at, Some(123));
+        let updated_auth =
+            read_auth_value(&account_auth_path(&home, "person-user::person-account")).unwrap();
+        assert_eq!(
+            updated_auth
+                .pointer("/tokens/access_token")
+                .and_then(Value::as_str),
+            Some("updated-access-token")
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn sub2api_import_rejects_newer_versions_without_writes() {
+        let home = temporary_home("sub2api-future");
+        let payload = json!({
+            "type": "sub2api-data",
+            "version": 2,
+            "accounts": []
+        });
+
+        let result = import_payload(&home, payload);
+
+        assert_eq!(result.get("ok").and_then(Value::as_bool), Some(false));
+        assert!(result
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|message| message.contains("newer app version")));
+        assert!(!registry_path(&home).exists());
+        assert!(!accounts_dir(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 

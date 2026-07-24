@@ -1,6 +1,6 @@
 {
   "name": "codex-auth-desktop-tauri",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Tauri desktop account manager for Codex",
   "private": true,
   "type": "module",

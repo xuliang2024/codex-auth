@@ -45,6 +45,9 @@ const choicePrimaryDescEl = document.getElementById("choice-primary-desc");
 const choiceSecondaryBtn = document.getElementById("choice-secondary");
 const choiceSecondaryTitleEl = document.getElementById("choice-secondary-title");
 const choiceSecondaryDescEl = document.getElementById("choice-secondary-desc");
+const choiceTertiaryBtn = document.getElementById("choice-tertiary");
+const choiceTertiaryTitleEl = document.getElementById("choice-tertiary-title");
+const choiceTertiaryDescEl = document.getElementById("choice-tertiary-desc");
 const choiceCancelBtn = document.getElementById("choice-cancel");
 const promptOverlay = document.getElementById("prompt-overlay");
 const promptTitleEl = document.getElementById("prompt-title");
@@ -150,13 +153,25 @@ function setChoiceOption(titleEl, descEl, label, description = "") {
   descEl.classList.toggle("hidden", !description);
 }
 
-function showChoice({ title, message, primaryLabel, primaryDescription, secondaryLabel, secondaryDescription, cancelLabel }) {
+function showChoice({
+  title,
+  message,
+  primaryLabel,
+  primaryDescription,
+  secondaryLabel,
+  secondaryDescription,
+  tertiaryLabel,
+  tertiaryDescription,
+  cancelLabel,
+}) {
   cancelLabel = cancelLabel ?? t("btn.cancel");
   return new Promise((resolve) => {
     choiceTitleEl.textContent = title;
     choiceMessageEl.textContent = message;
     setChoiceOption(choicePrimaryTitleEl, choicePrimaryDescEl, primaryLabel, primaryDescription);
     setChoiceOption(choiceSecondaryTitleEl, choiceSecondaryDescEl, secondaryLabel, secondaryDescription);
+    setChoiceOption(choiceTertiaryTitleEl, choiceTertiaryDescEl, tertiaryLabel, tertiaryDescription);
+    choiceTertiaryBtn.classList.toggle("hidden", !tertiaryLabel);
     choiceCancelBtn.textContent = cancelLabel;
     openOverlay(choiceOverlay);
     choicePrimaryBtn.focus();
@@ -165,6 +180,7 @@ function showChoice({ title, message, primaryLabel, primaryDescription, secondar
       closeOverlay(choiceOverlay);
       choicePrimaryBtn.removeEventListener("click", onPrimary);
       choiceSecondaryBtn.removeEventListener("click", onSecondary);
+      choiceTertiaryBtn.removeEventListener("click", onTertiary);
       choiceCancelBtn.removeEventListener("click", onCancel);
       choiceOverlay.removeEventListener("mousedown", onBackdrop);
       document.removeEventListener("keydown", onKey, true);
@@ -172,6 +188,7 @@ function showChoice({ title, message, primaryLabel, primaryDescription, secondar
     };
     const onPrimary = () => close("primary");
     const onSecondary = () => close("secondary");
+    const onTertiary = () => close("tertiary");
     const onCancel = () => close(null);
     const onBackdrop = (event) => {
       if (event.target === choiceOverlay) close(null);
@@ -184,6 +201,7 @@ function showChoice({ title, message, primaryLabel, primaryDescription, secondar
     };
     choicePrimaryBtn.addEventListener("click", onPrimary);
     choiceSecondaryBtn.addEventListener("click", onSecondary);
+    choiceTertiaryBtn.addEventListener("click", onTertiary);
     choiceCancelBtn.addEventListener("click", onCancel);
     choiceOverlay.addEventListener("mousedown", onBackdrop);
     document.addEventListener("keydown", onKey, true);
@@ -1056,12 +1074,14 @@ async function runImportFlow() {
     message: t("confirm.importMessage"),
     primaryLabel: t("confirm.import"),
     primaryDescription: t("confirm.importDesc"),
-    secondaryLabel: t("confirm.importLink"),
-    secondaryDescription: t("confirm.importLinkDesc"),
+    secondaryLabel: t("confirm.importSub2Api"),
+    secondaryDescription: t("confirm.importSub2ApiDesc"),
+    tertiaryLabel: t("confirm.importLink"),
+    tertiaryDescription: t("confirm.importLinkDesc"),
   });
   if (!choice) return;
 
-  if (choice === "secondary") {
+  if (choice === "tertiary") {
     const url = await showPrompt({
       title: t("confirm.importLinkTitle"),
       message: t("confirm.importLinkMessage"),
